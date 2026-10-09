@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">Ava Player</string>
+    <string name="tab_tracks">Tracks</string>
+    <string name="tab_artists">Artists</string>
+    <string name="tab_albums">Albums</string>
+    <string name="tab_playlists">Playlists</string>
+    <string name="tab_equalizer">Equalizer</string>
+    <string name="search_hint">Search songs, artists, albums…</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="next">Next</string>
+    <string name="previous">Previous</string>
+    <string name="shuffle">Shuffle</string>
+    <string name="repeat">Repeat</string>
+    <string name="favorite">Favorite</string>
+    <string name="sleep_timer">Sleep Timer</string>
+    <string name="lyrics">Lyrics</string>
+    <string name="queue">Up Next</string>
+    <string name="create_playlist">Create Playlist</string>
+    <string name="add_to_playlist">Add to Playlist</string>
+    <string name="scan_music">Scan Device Music</string>
+    <string name="import_audio">Import Audio File</string>
+    <string name="bass_boost">Bass Boost</string>
+    <string name="virtualizer">3D Surround</string>
+    <string name="playback_speed">Playback Speed</string>
+    <string name="now_playing">Now Playing</string>
+</resources>
