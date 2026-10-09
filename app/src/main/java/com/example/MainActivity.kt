@@ -120,11 +120,13 @@ fun MusicPlayerApp(viewModel: MusicViewModel = viewModel()) {
     // State observations
     val songs by viewModel.songs.collectAsStateWithLifecycle()
     val playlists by viewModel.playlists.collectAsStateWithLifecycle()
+    val folders by viewModel.folders.collectAsStateWithLifecycle()
     val favoriteIds by viewModel.favoriteIds.collectAsStateWithLifecycle()
     val recentlyPlayedIds by viewModel.recentlyPlayedIds.collectAsStateWithLifecycle()
 
     val currentSong by viewModel.currentSong.collectAsStateWithLifecycle()
     val isPlaying by viewModel.isPlaying.collectAsStateWithLifecycle()
+    val isAutoPlay by viewModel.isAutoPlay.collectAsStateWithLifecycle()
     val currentPositionMs by viewModel.currentPositionMs.collectAsStateWithLifecycle()
     val durationMs by viewModel.durationMs.collectAsStateWithLifecycle()
     val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
@@ -156,6 +158,16 @@ fun MusicPlayerApp(viewModel: MusicViewModel = viewModel()) {
             }
             viewModel.importAudioFile(uri, fileName)
             Toast.makeText(context, "فایل با موفقیت افزوده شد: $fileName", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Folder Picker for scanning custom directories
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.scanFolder(uri)
+            Toast.makeText(context, "در حال جستجو و اسکن آهنگ‌ها از پوشه...", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -388,14 +400,19 @@ fun MusicPlayerApp(viewModel: MusicViewModel = viewModel()) {
                 NavigationTab.TRACKS -> {
                     TracksScreen(
                         songs = songs,
+                        folders = folders,
                         currentSong = currentSong,
                         isPlaying = isPlaying,
+                        isAutoPlay = isAutoPlay,
                         favoriteIds = favoriteIds,
                         onSongClick = { song, list -> viewModel.playSong(song, list) },
                         onToggleFavorite = { viewModel.toggleFavorite(it) },
                         onAddToPlaylist = { viewModel.setSongForAddToPlaylist(it) },
                         onImportAudio = { filePickerLauncher.launch(arrayOf("audio/*")) },
-                        onScanDevice = requestMediaPermission
+                        onScanFolder = { folderPickerLauncher.launch(null) },
+                        onScanDevice = requestMediaPermission,
+                        onToggleAutoPlay = { viewModel.toggleAutoPlay() },
+                        onPlayAllAuto = { list -> viewModel.playAllAuto(list) }
                     )
                 }
 

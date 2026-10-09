@@ -2,7 +2,10 @@ package com.example.data.repository
 
 import android.content.ContentUris
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Environment
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.util.Log
 import androidx.core.net.toUri
@@ -23,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class MusicRepository(
     private val context: Context,
@@ -41,6 +45,11 @@ class MusicRepository(
     val albums: Flow<List<AlbumEntity>> = musicDao.getAllAlbums()
 
     val artists: Flow<List<ArtistEntity>> = musicDao.getAllArtists()
+
+    val folders: Flow<List<String>> = musicDao.getAllFolders()
+
+    fun getSongsByFolder(folderName: String): Flow<List<Song>> =
+        musicDao.getSongsByFolder(folderName).map { list -> list.map { it.toDomainModel() } }
 
     private val _recentlyPlayedIds = MutableStateFlow<List<String>>(emptyList())
     val recentlyPlayedIds: StateFlow<List<String>> = _recentlyPlayedIds.asStateFlow()
@@ -68,22 +77,24 @@ class MusicRepository(
             musicDao.insertPlaylist(p2)
         }
 
-        // Scan device audio and sync into Room
+        // Scan device audio & storage folders and sync into Room
         syncDeviceAudioWithRoom()
     }
 
     private suspend fun syncDeviceAudioWithRoom() = withContext(Dispatchers.IO) {
         val deviceSongs = scanDeviceAudio()
-        if (deviceSongs.isNotEmpty()) {
-            val entities = deviceSongs.map { SongEntity.fromDomainModel(it) }
+        val directFolderSongs = scanDirectStorageFolders()
+        val allFound = (deviceSongs + directFolderSongs).distinctBy { it.uri.toString() }
+
+        if (allFound.isNotEmpty()) {
+            val entities = allFound.map { SongEntity.fromDomainModel(it) }
             musicDao.insertSongs(entities)
         }
         deriveAndStoreAlbumsAndArtists()
     }
 
     private suspend fun deriveAndStoreAlbumsAndArtists() = withContext(Dispatchers.IO) {
-        // Fetch current songs from MediaStore/Built-in to populate Albums and Artists tables
-        val allTracks = generateBuiltInSongs() + scanDeviceAudio()
+        val allTracks = generateBuiltInSongs() + scanDeviceAudio() + scanDirectStorageFolders()
 
         // Derive Albums
         val albumGroups = allTracks.groupBy { it.album }
@@ -138,7 +149,8 @@ class MusicRepository(
 [00:14.00] Electric heart, infinite beat!
 [00:16.50] ♫ Melodic Synth Climax ♫
                     """.trimIndent(),
-                    isBuiltIn = true
+                    isBuiltIn = true,
+                    folderName = "Studio Demo"
                 )
             )
 
@@ -161,7 +173,8 @@ class MusicRepository(
 [00:14.00] کز عشق آن سرو روان گویی روانم می‌رود
 [00:17.00] ♫ تکنوازی احساسی و پرده‌گردانی ♫
                     """.trimIndent(),
-                    isBuiltIn = true
+                    isBuiltIn = true,
+                    folderName = "Studio Demo"
                 )
             )
 
@@ -184,7 +197,8 @@ class MusicRepository(
 [00:13.00] Lost in a cozy peaceful twilight dream
 [00:16.00] ♫ Soothing Bassline & Mellow Keys ♫
                     """.trimIndent(),
-                    isBuiltIn = true
+                    isBuiltIn = true,
+                    folderName = "Studio Demo"
                 )
             )
 
@@ -207,7 +221,8 @@ class MusicRepository(
 [00:13.00] When the music plays, we are alive!
 [00:16.00] ♫ Peak Drop & Sub-bass Resonance ♫
                     """.trimIndent(),
-                    isBuiltIn = true
+                    isBuiltIn = true,
+                    folderName = "Studio Demo"
                 )
             )
         } catch (e: Exception) {
@@ -224,7 +239,8 @@ class MusicRepository(
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.ALBUM_ID
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.BUCKET_DISPLAY_NAME
         )
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -246,6 +262,7 @@ class MusicRepository(
                 val albumCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
                 val durationCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val albumIdCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM_ID)
+                val bucketCol = c.getColumnIndex(MediaStore.Audio.Media.BUCKET_DISPLAY_NAME)
 
                 while (c.moveToNext()) {
                     val id = c.getLong(idCol)
@@ -254,6 +271,7 @@ class MusicRepository(
                     val album = c.getString(albumCol) ?: "Unknown Album"
                     val duration = c.getLong(durationCol)
                     val albumId = c.getLong(albumIdCol)
+                    val folderName = if (bucketCol >= 0) c.getString(bucketCol) ?: "Music" else "Music"
 
                     val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
                     val albumArtUri = "content://media/external/audio/albumart/$albumId".toUri()
@@ -268,7 +286,8 @@ class MusicRepository(
                                 durationMs = duration,
                                 uri = contentUri,
                                 albumArtUri = albumArtUri,
-                                isBuiltIn = false
+                                isBuiltIn = false,
+                                folderName = folderName
                             )
                         )
                     }
@@ -279,6 +298,141 @@ class MusicRepository(
         }
 
         result
+    }
+
+    suspend fun scanDirectStorageFolders(): List<Song> = withContext(Dispatchers.IO) {
+        val songsList = mutableListOf<Song>()
+        val searchDirs = listOfNotNull(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PODCASTS),
+            File("/sdcard/Music"),
+            File("/sdcard/Download"),
+            File("/sdcard/Audio"),
+            context.getExternalFilesDir(Environment.DIRECTORY_MUSIC)
+        )
+
+        val supportedExtensions = setOf("mp3", "m4a", "wav", "flac", "ogg", "aac")
+
+        for (dir in searchDirs) {
+            if (dir.exists() && dir.isDirectory) {
+                scanDirectoryRecursively(dir, supportedExtensions, songsList, maxDepth = 3)
+            }
+        }
+
+        songsList
+    }
+
+    private fun scanDirectoryRecursively(
+        folder: File,
+        extensions: Set<String>,
+        result: MutableList<Song>,
+        maxDepth: Int
+    ) {
+        if (maxDepth < 0) return
+        val files = folder.listFiles() ?: return
+
+        for (file in files) {
+            if (file.isDirectory) {
+                scanDirectoryRecursively(file, extensions, result, maxDepth - 1)
+            } else if (file.isFile) {
+                val ext = file.extension.lowercase()
+                if (extensions.contains(ext) && file.length() > 50000) {
+                    try {
+                        val retriever = MediaMetadataRetriever()
+                        retriever.setDataSource(file.absolutePath)
+                        val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
+                            ?: file.nameWithoutExtension
+                        val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
+                            ?: "Unknown Artist"
+                        val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
+                            ?: folder.name
+                        val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                        val duration = durationStr?.toLongOrNull() ?: 60000L
+                        retriever.release()
+
+                        result.add(
+                            Song(
+                                id = "file_${file.absolutePath.hashCode()}",
+                                title = title,
+                                artist = artist,
+                                album = album,
+                                durationMs = duration,
+                                uri = Uri.fromFile(file),
+                                isBuiltIn = false,
+                                folderName = folder.name
+                            )
+                        )
+                    } catch (e: Exception) {
+                        result.add(
+                            Song(
+                                id = "file_${file.absolutePath.hashCode()}",
+                                title = file.nameWithoutExtension,
+                                artist = "Audio File",
+                                album = folder.name,
+                                durationMs = 60000L,
+                                uri = Uri.fromFile(file),
+                                isBuiltIn = false,
+                                folderName = folder.name
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    suspend fun scanFolderTreeUri(treeUri: Uri) = withContext(Dispatchers.IO) {
+        try {
+            val docId = DocumentsContract.getTreeDocumentId(treeUri)
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
+            val folderName = docId.substringAfterLast(':', "Custom Folder").substringAfterLast('/', "Custom Folder")
+            val songsToAdd = mutableListOf<Song>()
+            val supportedExtensions = setOf("mp3", "m4a", "wav", "flac", "ogg", "aac")
+
+            val projection = arrayOf(
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE
+            )
+
+            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+
+                while (cursor.moveToNext()) {
+                    val childId = cursor.getString(idCol)
+                    val name = cursor.getString(nameCol) ?: ""
+                    val mime = cursor.getString(mimeCol) ?: ""
+                    val ext = name.substringAfterLast('.', "").lowercase()
+
+                    if (mime.startsWith("audio/") || supportedExtensions.contains(ext)) {
+                        val fileDocUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)
+                        songsToAdd.add(
+                            Song(
+                                id = "tree_${childId.hashCode()}",
+                                title = name.substringBeforeLast('.'),
+                                artist = "Folder Track",
+                                album = folderName,
+                                durationMs = 60000L,
+                                uri = fileDocUri,
+                                isBuiltIn = false,
+                                folderName = folderName
+                            )
+                        )
+                    }
+                }
+            }
+
+            if (songsToAdd.isNotEmpty()) {
+                val entities = songsToAdd.map { SongEntity.fromDomainModel(it) }
+                musicDao.insertSongs(entities)
+                deriveAndStoreAlbumsAndArtists()
+            }
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "Failed scanning folder tree URI: $treeUri", e)
+        }
     }
 
     suspend fun refreshDeviceAudio() {
@@ -294,7 +448,8 @@ class MusicRepository(
             durationMs = durationMs,
             uri = uri,
             albumArtRes = R.drawable.album_art_neon,
-            isBuiltIn = false
+            isBuiltIn = false,
+            folderName = "Imported"
         )
         musicDao.insertSong(SongEntity.fromDomainModel(newSong))
         deriveAndStoreAlbumsAndArtists()

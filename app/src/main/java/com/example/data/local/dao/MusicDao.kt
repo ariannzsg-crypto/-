@@ -30,6 +30,12 @@ interface MusicDao {
     @Query("SELECT * FROM songs WHERE album = :album ORDER BY title ASC")
     fun getSongsByAlbum(album: String): Flow<List<SongEntity>>
 
+    @Query("SELECT DISTINCT folderName FROM songs WHERE folderName != '' ORDER BY folderName ASC")
+    fun getAllFolders(): Flow<List<String>>
+
+    @Query("SELECT * FROM songs WHERE folderName = :folderName ORDER BY title ASC")
+    fun getSongsByFolder(folderName: String): Flow<List<SongEntity>>
+
     @Query("SELECT * FROM songs WHERE title LIKE '%' || :query || '%' OR artist LIKE '%' || :query || '%' OR album LIKE '%' || :query || '%' ORDER BY title ASC")
     fun searchSongs(query: String): Flow<List<SongEntity>>
 

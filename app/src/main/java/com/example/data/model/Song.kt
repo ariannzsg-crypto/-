@@ -14,7 +14,8 @@ data class Song(
     val lyrics: String? = null,
     val isFavorite: Boolean = false,
     val playCount: Int = 0,
-    val isBuiltIn: Boolean = false
+    val isBuiltIn: Boolean = false,
+    val folderName: String = "Internal"
 )
 
 enum class RepeatMode {

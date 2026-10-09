@@ -116,4 +116,39 @@ class ExampleRobolectricTest {
         assertEquals(1, playlists.size)
         assertEquals("Workout Beats", playlists[0].name)
     }
+
+    @Test
+    fun `test folder querying in Room database`() = runBlocking {
+        val dao = db.musicDao()
+        dao.insertSong(
+            SongEntity(
+                id = "folder_song_1",
+                title = "Folder Track 1",
+                artist = "Artist A",
+                album = "Album A",
+                durationMs = 20000L,
+                uriString = "file:///sdcard/Music/track1.mp3",
+                folderName = "Music"
+            )
+        )
+        dao.insertSong(
+            SongEntity(
+                id = "folder_song_2",
+                title = "Folder Track 2",
+                artist = "Artist B",
+                album = "Album B",
+                durationMs = 30000L,
+                uriString = "file:///sdcard/Download/track2.mp3",
+                folderName = "Download"
+            )
+        )
+
+        val folders = dao.getAllFolders().first()
+        assertTrue(folders.contains("Music"))
+        assertTrue(folders.contains("Download"))
+
+        val musicSongs = dao.getSongsByFolder("Music").first()
+        assertEquals(1, musicSongs.size)
+        assertEquals("Folder Track 1", musicSongs[0].title)
+    }
 }

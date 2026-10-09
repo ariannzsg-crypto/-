@@ -20,6 +20,7 @@ data class SongEntity(
     val isFavorite: Boolean = false,
     val playCount: Int = 0,
     val isBuiltIn: Boolean = false,
+    val folderName: String = "Internal",
     val dateAdded: Long = System.currentTimeMillis()
 ) {
     fun toDomainModel(): Song {
@@ -35,7 +36,8 @@ data class SongEntity(
             lyrics = lyrics,
             isFavorite = isFavorite,
             playCount = playCount,
-            isBuiltIn = isBuiltIn
+            isBuiltIn = isBuiltIn,
+            folderName = folderName
         )
     }
 
@@ -53,7 +55,8 @@ data class SongEntity(
                 lyrics = song.lyrics,
                 isFavorite = song.isFavorite,
                 playCount = song.playCount,
-                isBuiltIn = song.isBuiltIn
+                isBuiltIn = song.isBuiltIn,
+                folderName = song.folderName
             )
         }
     }

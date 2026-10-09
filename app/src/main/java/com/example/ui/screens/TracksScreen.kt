@@ -22,16 +22,22 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -50,6 +56,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -73,6 +80,7 @@ import com.example.ui.theme.WarmGold
 
 enum class SongFilter {
     ALL,
+    FOLDERS,
     FAVORITES,
     MOST_PLAYED,
     BUILT_IN
@@ -81,28 +89,36 @@ enum class SongFilter {
 @Composable
 fun TracksScreen(
     songs: List<Song>,
+    folders: List<String>,
     currentSong: Song?,
     isPlaying: Boolean,
+    isAutoPlay: Boolean,
     favoriteIds: Set<String>,
     onSongClick: (Song, List<Song>) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onAddToPlaylist: (Song) -> Unit,
     onImportAudio: () -> Unit,
+    onScanFolder: () -> Unit,
     onScanDevice: () -> Unit,
+    onToggleAutoPlay: () -> Unit,
+    onPlayAllAuto: (List<Song>) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf(SongFilter.ALL) }
+    var selectedFolderName by remember { mutableStateOf<String?>(null) }
 
-    val filteredSongs = remember(songs, searchQuery, selectedFilter, favoriteIds) {
+    val filteredSongs = remember(songs, searchQuery, selectedFilter, selectedFolderName, favoriteIds) {
         songs.filter { song ->
             val matchesSearch = searchQuery.isBlank() ||
                     song.title.contains(searchQuery, ignoreCase = true) ||
                     song.artist.contains(searchQuery, ignoreCase = true) ||
-                    song.album.contains(searchQuery, ignoreCase = true)
+                    song.album.contains(searchQuery, ignoreCase = true) ||
+                    song.folderName.contains(searchQuery, ignoreCase = true)
 
             val matchesFilter = when (selectedFilter) {
                 SongFilter.ALL -> true
+                SongFilter.FOLDERS -> selectedFolderName == null || song.folderName == selectedFolderName
                 SongFilter.FAVORITES -> favoriteIds.contains(song.id)
                 SongFilter.MOST_PLAYED -> song.playCount > 0
                 SongFilter.BUILT_IN -> song.isBuiltIn
@@ -131,7 +147,7 @@ fun TracksScreen(
                 .fillMaxWidth()
                 .padding(top = 10.dp)
                 .testTag("search_input"),
-            placeholder = { Text("جستجوی آهنگ، خواننده یا آلبوم...", color = TextMuted, fontSize = 13.sp) },
+            placeholder = { Text("جستجوی آهنگ، خواننده، آلبوم یا پوشه...", color = TextMuted, fontSize = 13.sp) },
             leadingIcon = {
                 Icon(Icons.Default.Search, contentDescription = "Search", tint = NeonViolet)
             },
@@ -156,7 +172,59 @@ fun TracksScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Quick Import & Scan Action Bar
+        // Autoplay & Auto Scan Action Banner
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Autoplay Button with continuous indicator
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (isAutoPlay) NeonViolet.copy(alpha = 0.25f) else SurfaceElevated)
+                    .border(
+                        1.dp,
+                        if (isAutoPlay) NeonViolet else SurfaceHighlight,
+                        RoundedCornerShape(14.dp)
+                    )
+                    .clickable { onToggleAutoPlay() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Autorenew,
+                    contentDescription = "Autoplay",
+                    tint = if (isAutoPlay) NeonCyan else TextMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isAutoPlay) "پخش خودکار: فعال" else "پخش خودکار: خاموش",
+                    color = if (isAutoPlay) NeonCyan else TextMuted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Quick Play All button
+            if (filteredSongs.isNotEmpty()) {
+                Button(
+                    onClick = { onPlayAllAuto(filteredSongs) },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonViolet),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("پخش همه (${filteredSongs.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Quick Import, Folder Scan & Storage Action Bar
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -171,15 +239,19 @@ fun TracksScreen(
                     val isSel = selectedFilter == filter
                     val label = when (filter) {
                         SongFilter.ALL -> "همه (${songs.size})"
+                        SongFilter.FOLDERS -> "پوشه‌ها 📁"
                         SongFilter.FAVORITES -> "علاقه‌مندی‌ها (${favoriteIds.size})"
                         SongFilter.MOST_PLAYED -> "پربازدیدترین"
-                        SongFilter.BUILT_IN -> "کیفیت استودیو"
+                        SongFilter.BUILT_IN -> "استودیو HQ"
                     }
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
                             .background(if (isSel) NeonViolet else SurfaceElevated)
-                            .clickable { selectedFilter = filter }
+                            .clickable {
+                                selectedFilter = filter
+                                if (filter != SongFilter.FOLDERS) selectedFolderName = null
+                            }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
@@ -194,7 +266,26 @@ fun TracksScreen(
 
             Spacer(modifier = Modifier.width(6.dp))
 
-            // Import Audio Button
+            // Scan Folder Button (SAF Folder Tree)
+            IconButton(
+                onClick = onScanFolder,
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(SurfaceElevated)
+                    .testTag("scan_folder_btn")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CreateNewFolder,
+                    contentDescription = "Scan Folder",
+                    tint = WarmGold,
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            // Import Single Audio File Button
             IconButton(
                 onClick = onImportAudio,
                 modifier = Modifier
@@ -213,7 +304,7 @@ fun TracksScreen(
 
             Spacer(modifier = Modifier.width(4.dp))
 
-            // Scan Device Button
+            // Scan Device Button (MediaStore & Folders)
             IconButton(
                 onClick = onScanDevice,
                 modifier = Modifier
@@ -231,6 +322,63 @@ fun TracksScreen(
             }
         }
 
+        // Sub-chips for Folders when FOLDERS filter is selected
+        if (selectedFilter == SongFilter.FOLDERS) {
+            Spacer(modifier = Modifier.height(10.dp))
+            val folderNames = remember(songs) {
+                songs.map { it.folderName }.distinct().filter { it.isNotBlank() }
+            }
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (selectedFolderName == null) NeonCyan else SurfaceCard)
+                            .clickable { selectedFolderName = null }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            text = "همه پوشه‌ها",
+                            color = if (selectedFolderName == null) Color.Black else TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                items(folderNames) { fName ->
+                    val isSel = selectedFolderName == fName
+                    val count = songs.count { it.folderName == fName }
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isSel) NeonCyan else SurfaceCard)
+                            .clickable { selectedFolderName = fName }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
+                            tint = if (isSel) Color.Black else WarmGold,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "$fName ($count)",
+                            color = if (isSel) Color.Black else TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
 
         // Songs List
@@ -243,17 +391,26 @@ fun TracksScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        imageVector = Icons.Default.MusicNote,
+                        imageVector = Icons.Default.FolderOpen,
                         contentDescription = null,
                         tint = TextMuted,
-                        modifier = Modifier.size(48.dp)
+                        modifier = Modifier.size(54.dp)
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = "هیچ آهنگی یافت نشد",
+                        text = "هیچ آهنگی در این پوشه یا فیلتر یافت نشد",
                         color = TextSecondary,
                         fontSize = 14.sp
                     )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = onScanFolder,
+                        colors = ButtonDefaults.buttonColors(containerColor = WarmGold)
+                    ) {
+                        Icon(Icons.Default.CreateNewFolder, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("انتخاب و اسکن پوشه موزیک‌ها", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         } else {
@@ -368,7 +525,7 @@ fun SongItemRow(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            // Title, Artist, and Badges
+            // Title, Artist, Folder, and Badges
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = song.title,
@@ -387,6 +544,22 @@ fun SongItemRow(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (song.folderName.isNotBlank() && song.folderName != "Internal") {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(WarmGold.copy(alpha = 0.15f))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "📁 ${song.folderName}",
+                                color = WarmGold,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
                     if (song.playCount > 0) {
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(

@@ -55,6 +55,9 @@ class MusicPlayerManager(private val context: Context) {
     private val _isShuffle = MutableStateFlow(false)
     val isShuffle: StateFlow<Boolean> = _isShuffle.asStateFlow()
 
+    private val _isAutoPlay = MutableStateFlow(true)
+    val isAutoPlay: StateFlow<Boolean> = _isAutoPlay.asStateFlow()
+
     private val _playlist = MutableStateFlow<List<Song>>(emptyList())
     val playlist: StateFlow<List<Song>> = _playlist.asStateFlow()
 
@@ -221,6 +224,10 @@ class MusicPlayerManager(private val context: Context) {
         _isShuffle.value = !_isShuffle.value
     }
 
+    fun toggleAutoPlay() {
+        _isAutoPlay.value = !_isAutoPlay.value
+    }
+
     private fun handleTrackCompletion() {
         when (_repeatMode.value) {
             RepeatMode.ONE -> {
@@ -232,13 +239,17 @@ class MusicPlayerManager(private val context: Context) {
             }
             RepeatMode.OFF -> {
                 val currentList = _playlist.value
-                val currentIndex = currentList.indexOfFirst { it.id == _currentSong.value?.id }
-                if (currentIndex in 0 until currentList.lastIndex) {
+                if (_isAutoPlay.value && currentList.isNotEmpty()) {
                     playNext()
                 } else {
-                    _isPlaying.value = false
-                    _currentPositionMs.value = 0L
-                    onSongFinished?.invoke()
+                    val currentIndex = currentList.indexOfFirst { it.id == _currentSong.value?.id }
+                    if (currentIndex in 0 until currentList.lastIndex) {
+                        playNext()
+                    } else {
+                        _isPlaying.value = false
+                        _currentPositionMs.value = 0L
+                        onSongFinished?.invoke()
+                    }
                 }
             }
         }

@@ -46,6 +46,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val artists: StateFlow<List<ArtistEntity>> = repository.artists
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val folders: StateFlow<List<String>> = repository.folders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val favoriteIds: StateFlow<Set<String>> = songs
         .map { list -> list.filter { it.isFavorite }.map { it.id }.toSet() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
@@ -55,6 +58,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     // Playback flows from player manager
     val currentSong: StateFlow<Song?> = playerManager.currentSong
     val isPlaying: StateFlow<Boolean> = playerManager.isPlaying
+    val isAutoPlay: StateFlow<Boolean> = playerManager.isAutoPlay
     val currentPositionMs: StateFlow<Long> = playerManager.currentPositionMs
     val durationMs: StateFlow<Long> = playerManager.durationMs
     val playbackSpeed: StateFlow<Float> = playerManager.playbackSpeed
@@ -147,6 +151,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         playerManager.toggleRepeatMode()
     }
 
+    fun toggleAutoPlay() {
+        playerManager.toggleAutoPlay()
+    }
+
+    fun playAllAuto(songsList: List<Song>) {
+        if (songsList.isNotEmpty()) {
+            playerManager.playSong(songsList.first(), songsList)
+        }
+    }
+
     fun setPlaybackSpeed(speed: Float) {
         playerManager.setPlaybackSpeed(speed)
     }
@@ -198,6 +212,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun scanDeviceAudio() {
         viewModelScope.launch {
             repository.refreshDeviceAudio()
+        }
+    }
+
+    fun scanFolder(treeUri: Uri) {
+        viewModelScope.launch {
+            repository.scanFolderTreeUri(treeUri)
         }
     }
 
