@@ -35,11 +35,15 @@ import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -55,6 +59,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -133,6 +140,7 @@ fun MusicPlayerApp(viewModel: MusicViewModel = viewModel()) {
     val showSleepTimerDialog by viewModel.showSleepTimerDialog.collectAsStateWithLifecycle()
     val showCreatePlaylistDialog by viewModel.showCreatePlaylistDialog.collectAsStateWithLifecycle()
     val songForAddToPlaylist by viewModel.songForAddToPlaylist.collectAsStateWithLifecycle()
+    var showVersionDialog by remember { mutableStateOf(false) }
 
     // File Picker for importing custom audio files
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -248,6 +256,15 @@ fun MusicPlayerApp(viewModel: MusicViewModel = viewModel()) {
                             imageVector = Icons.Default.Equalizer,
                             contentDescription = "Equalizer",
                             tint = if (currentTab == NavigationTab.EQUALIZER) NeonCyan else TextSecondary
+                        )
+                    }
+
+                    // Version Info button
+                    IconButton(onClick = { showVersionDialog = true }) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Version Info",
+                            tint = NeonViolet
                         )
                     }
                 },
@@ -502,6 +519,43 @@ fun MusicPlayerApp(viewModel: MusicViewModel = viewModel()) {
                 viewModel.setShowCreatePlaylistDialog(true)
             },
             onDismiss = { viewModel.setSongForAddToPlaylist(null) }
+        )
+    }
+
+    // Version & App Info Dialog
+    if (showVersionDialog) {
+        AlertDialog(
+            onDismissRequest = { showVersionDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = NeonViolet)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("مشخصات و نسخه برنامه", color = TextPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column {
+                    Text("Ava Player (آوا پلیر)", color = NeonCyan, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("نسخه (Version): 1.0.0", color = TextPrimary, fontSize = 14.sp)
+                    Text("کد نسخه (Version Code): 1", color = TextSecondary, fontSize = 13.sp)
+                    Text("شناسه بسته: com.aistudio.musicplayer.kzqpva", color = TextMuted, fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("فایل‌های نسخه در پروژه:", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("• VERSION (متن نسخه 1.0.0)", color = TextPrimary, fontSize = 12.sp)
+                    Text("• version.json (اطلاعات فنی کامل JSON)", color = TextPrimary, fontSize = 12.sp)
+                    Text("• نسخه_برنامه.txt (توضیحات و گزارش تغییرات)", color = TextPrimary, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showVersionDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonViolet)
+                ) {
+                    Text("بستن")
+                }
+            },
+            containerColor = SurfaceCard
         )
     }
 }
