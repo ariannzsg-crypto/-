@@ -8,6 +8,7 @@ import com.example.data.local.entity.AlbumEntity
 import com.example.data.local.entity.ArtistEntity
 import com.example.data.local.entity.PlaylistEntity
 import com.example.data.local.entity.SongEntity
+import com.example.data.lyrics.LrcParser
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -150,5 +151,66 @@ class ExampleRobolectricTest {
         val musicSongs = dao.getSongsByFolder("Music").first()
         assertEquals(1, musicSongs.size)
         assertEquals("Folder Track 1", musicSongs[0].title)
+    }
+
+    @Test
+    fun `test LrcParser parsing and multiple time tags`() {
+        val lrcSample = """
+            [ti:Ava Song]
+            [ar:Ava Artist]
+            [al:Ava Album]
+            [offset:500]
+            [00:04.50]First line of the song
+            [00:10.00][00:20.00]Repeated chorus line
+            [01:05.123]Final verse
+        """.trimIndent()
+
+        val parsed = LrcParser.parse(lrcSample)
+
+        assertEquals("Ava Song", parsed.title)
+        assertEquals("Ava Artist", parsed.artist)
+        assertEquals("Ava Album", parsed.album)
+        assertEquals(500L, parsed.offsetMs)
+
+        // Line 1: 4500 + 500 = 5000ms
+        // Line 2 & 3: 10000 + 500 = 10500ms, and 20000 + 500 = 20500ms
+        // Line 4: 65123 + 500 = 65623ms
+        assertEquals(4, parsed.lines.size)
+        assertEquals(5000L, parsed.lines[0].timeMs)
+        assertEquals("First line of the song", parsed.lines[0].text)
+
+        assertEquals(10500L, parsed.lines[1].timeMs)
+        assertEquals("Repeated chorus line", parsed.lines[1].text)
+
+        assertEquals(20500L, parsed.lines[2].timeMs)
+        assertEquals("Repeated chorus line", parsed.lines[2].text)
+
+        assertEquals(65623L, parsed.lines[3].timeMs)
+        assertEquals("Final verse", parsed.lines[3].text)
+    }
+
+    @Test
+    fun `test LrcParser active line index calculation and formatting`() {
+        val lines = listOf(
+            com.example.data.lyrics.LrcLine(5000L, "Intro"),
+            com.example.data.lyrics.LrcLine(15000L, "Verse 1"),
+            com.example.data.lyrics.LrcLine(30000L, "Chorus")
+        )
+
+        // Before first line
+        assertEquals(0, LrcParser.findActiveLineIndex(lines, 2000L))
+
+        // On first line
+        assertEquals(0, LrcParser.findActiveLineIndex(lines, 8000L))
+
+        // On second line
+        assertEquals(1, LrcParser.findActiveLineIndex(lines, 16000L))
+
+        // On chorus
+        assertEquals(2, LrcParser.findActiveLineIndex(lines, 35000L))
+
+        // Test formatting
+        assertEquals("[00:05.00]", LrcParser.formatTimeTag(5000L))
+        assertEquals("[01:15.50]", LrcParser.formatTimeTag(75500L))
     }
 }

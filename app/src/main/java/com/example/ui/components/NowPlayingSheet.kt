@@ -1,7 +1,6 @@
 package com.example.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,60 +21,45 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Bedtime
-import androidx.compose.material.icons.filled.Equalizer
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Lyrics
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PlaylistAdd
-import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.R
 import com.example.data.model.RepeatMode
 import com.example.data.model.Song
 import com.example.data.model.VisualizerStyle
@@ -85,346 +69,278 @@ import com.example.ui.theme.NeonPink
 import com.example.ui.theme.NeonViolet
 import com.example.ui.theme.SurfaceCard
 import com.example.ui.theme.SurfaceElevated
-import com.example.ui.theme.SurfaceHighlight
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-import com.example.ui.theme.WarmGold
 
-enum class PlayerCenterView {
-    VINYL_TURNTABLE,
-    COVER_AND_VISUALIZER,
+enum class NowPlayingTab {
+    TURNTABLE,
+    VISUALIZER,
     LYRICS,
     QUEUE
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NowPlayingSheet(
     song: Song?,
     isPlaying: Boolean,
     currentPositionMs: Long,
     durationMs: Long,
-    playbackSpeed: Float,
     repeatMode: RepeatMode,
     isShuffle: Boolean,
-    isFavorite: Boolean,
-    visualizerAmplitudes: FloatArray,
-    playlist: List<Song>,
-    sleepTimerSeconds: Int?,
-    onTogglePlayPause: () -> Unit,
+    queue: List<Song>,
+    sleepTimerRemainingSeconds: Int?,
+    onCloseClick: () -> Unit,
+    onPlayPauseClick: () -> Unit,
+    onNextClick: () -> Unit,
+    onPreviousClick: () -> Unit,
     onSeekTo: (Long) -> Unit,
-    onSeekForward: () -> Unit,
-    onSeekBackward: () -> Unit,
-    onNext: () -> Unit,
-    onPrevious: () -> Unit,
-    onToggleShuffle: () -> Unit,
-    onToggleRepeat: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onSetPlaybackSpeed: (Float) -> Unit,
-    onOpenEqualizer: () -> Unit,
+    onFavoriteToggle: () -> Unit,
+    onRepeatToggle: () -> Unit,
+    onShuffleToggle: () -> Unit,
+    onAddToPlaylistClick: () -> Unit,
     onOpenSleepTimer: () -> Unit,
-    onAddToPlaylist: () -> Unit,
     onSaveLyrics: (String) -> Unit,
-    onSelectQueueSong: (Song) -> Unit,
-    onDismiss: () -> Unit
+    onSelectQueueItem: (Song) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     if (song == null) return
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var centerView by remember { mutableStateOf(PlayerCenterView.VINYL_TURNTABLE) }
+    var currentTab by remember { mutableStateOf(NowPlayingTab.TURNTABLE) }
     var visualizerStyle by remember { mutableStateOf(VisualizerStyle.SPECTRUM_BARS) }
-    var showSpeedMenu by remember { mutableStateOf(false) }
 
-    // Smooth dragging seekbar state
-    var isDraggingSlider by remember { mutableStateOf(false) }
-    var sliderDragPosition by remember { mutableFloatStateOf(0f) }
-
-    val currentSliderValue = if (isDraggingSlider) {
-        sliderDragPosition
-    } else {
-        if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MidnightBackground,
-        dragHandle = null,
-        modifier = Modifier.fillMaxSize()
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MidnightBackground)
+            .testTag("now_playing_sheet")
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Top Bar
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.size(44.dp).testTag("close_sheet_btn")
-                ) {
+                IconButton(onClick = onCloseClick) {
                     Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
+                        imageVector = Icons.Default.Close,
                         contentDescription = "Collapse",
-                        tint = TextPrimary,
-                        modifier = Modifier.size(32.dp)
+                        tint = TextPrimary
                     )
                 }
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "در حال پخش / NOW PLAYING",
+                        text = "در حال پخش",
                         color = NeonCyan,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp
+                        letterSpacing = 1.sp
                     )
                     Text(
                         text = song.album,
                         color = TextSecondary,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Sleep timer badge
-                    IconButton(onClick = onOpenSleepTimer) {
-                        if (sleepTimerSeconds != null && sleepTimerSeconds > 0) {
-                            BadgedBox(badge = {
-                                Badge(containerColor = NeonPink) {
-                                    Text("${sleepTimerSeconds / 60}m", fontSize = 9.sp)
-                                }
-                            }) {
-                                Icon(Icons.Default.Bedtime, contentDescription = "Sleep Timer", tint = NeonPink)
-                            }
-                        } else {
-                            Icon(Icons.Default.Bedtime, contentDescription = "Sleep Timer", tint = TextSecondary)
-                        }
-                    }
-
-                    // Equalizer shortcut
-                    IconButton(onClick = onOpenEqualizer) {
-                        Icon(Icons.Default.Equalizer, contentDescription = "Equalizer", tint = NeonViolet)
-                    }
+                IconButton(onClick = onOpenSleepTimer) {
+                    Icon(
+                        imageVector = Icons.Default.Bedtime,
+                        contentDescription = "Sleep Timer",
+                        tint = if (sleepTimerRemainingSeconds != null) NeonCyan else TextPrimary
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Center View Switcher Pills
+            // Tab Selector Pills
             Row(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
                     .background(SurfaceElevated)
                     .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                CenterViewPill(
-                    icon = Icons.Default.GraphicEq,
-                    label = "گرامافون",
-                    isSelected = centerView == PlayerCenterView.VINYL_TURNTABLE,
-                    onClick = { centerView = PlayerCenterView.VINYL_TURNTABLE }
+                TabPill(
+                    title = "گرامافون",
+                    selected = currentTab == NowPlayingTab.TURNTABLE,
+                    onClick = { currentTab = NowPlayingTab.TURNTABLE }
                 )
-                CenterViewPill(
-                    icon = Icons.Default.MusicNote,
-                    label = "ویژوالایزر",
-                    isSelected = centerView == PlayerCenterView.COVER_AND_VISUALIZER,
-                    onClick = { centerView = PlayerCenterView.COVER_AND_VISUALIZER }
+                TabPill(
+                    title = "ویژوالایزر",
+                    selected = currentTab == NowPlayingTab.VISUALIZER,
+                    onClick = { currentTab = NowPlayingTab.VISUALIZER }
                 )
-                CenterViewPill(
-                    icon = Icons.Default.Lyrics,
-                    label = "متن ترانه",
-                    isSelected = centerView == PlayerCenterView.LYRICS,
-                    onClick = { centerView = PlayerCenterView.LYRICS }
+                TabPill(
+                    title = "متن ترانه",
+                    selected = currentTab == NowPlayingTab.LYRICS,
+                    onClick = { currentTab = NowPlayingTab.LYRICS }
                 )
-                CenterViewPill(
-                    icon = Icons.AutoMirrored.Filled.QueueMusic,
-                    label = "صف پخش",
-                    isSelected = centerView == PlayerCenterView.QUEUE,
-                    onClick = { centerView = PlayerCenterView.QUEUE }
+                TabPill(
+                    title = "صف پخش",
+                    selected = currentTab == NowPlayingTab.QUEUE,
+                    onClick = { currentTab = NowPlayingTab.QUEUE }
                 )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Center Content
+            // Main Display Area based on selected Tab
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                when (centerView) {
-                    PlayerCenterView.VINYL_TURNTABLE -> {
-                        VinylTurntable(
-                            song = song,
-                            isPlaying = isPlaying,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
+                AnimatedContent(targetState = currentTab, label = "tab_anim") { tab ->
+                    when (tab) {
+                        NowPlayingTab.TURNTABLE -> {
+                            VinylTurntable(
+                                song = song,
+                                isPlaying = isPlaying,
+                                modifier = Modifier.size(280.dp)
+                            )
+                        }
 
-                    PlayerCenterView.COVER_AND_VISUALIZER -> {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            // Cover art card with visualizer underlay
-                            Box(
-                                modifier = Modifier
-                                    .size(240.dp)
-                                    .clip(RoundedCornerShape(24.dp))
-                                    .background(SurfaceCard)
-                                    .border(2.dp, NeonViolet.copy(alpha = 0.6f), RoundedCornerShape(24.dp))
-                                    .shadow(20.dp, RoundedCornerShape(24.dp)),
-                                contentAlignment = Alignment.Center
+                        NowPlayingTab.VISUALIZER -> {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.fillMaxSize()
                             ) {
-                                if (song.albumArtRes != null) {
-                                    Image(
-                                        painter = painterResource(id = song.albumArtRes),
-                                        contentDescription = song.title,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                } else if (song.albumArtUri != null) {
-                                    AsyncImage(
-                                        model = song.albumArtUri,
-                                        contentDescription = song.title,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.MusicNote,
-                                        contentDescription = null,
-                                        tint = NeonCyan,
-                                        modifier = Modifier.size(64.dp)
-                                    )
+                                // Album art thumbnail with glow
+                                Box(
+                                    modifier = Modifier
+                                        .size(170.dp)
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .border(2.dp, NeonViolet, RoundedCornerShape(20.dp))
+                                ) {
+                                    if (song.albumArtRes != null) {
+                                        Image(
+                                            painter = painterResource(id = song.albumArtRes),
+                                            contentDescription = song.title,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else if (song.albumArtUri != null) {
+                                        AsyncImage(
+                                            model = song.albumArtUri,
+                                            contentDescription = song.title,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Image(
+                                            painter = painterResource(id = R.drawable.album_art_neon),
+                                            contentDescription = "Cover",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
                                 }
-                            }
 
-                            Spacer(modifier = Modifier.height(20.dp))
+                                Spacer(modifier = Modifier.height(20.dp))
 
-                            // Reactive Visualizer Canvas
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(70.dp)
-                                    .padding(horizontal = 16.dp)
-                            ) {
                                 AudioVisualizer(
-                                    amplitudes = visualizerAmplitudes,
                                     isPlaying = isPlaying,
-                                    style = visualizerStyle
+                                    style = visualizerStyle,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(100.dp)
                                 )
-                            }
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
 
-                            // Visualizer style quick selector
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                VisualizerStyle.entries.forEach { style ->
-                                    val isCur = visualizerStyle == style
-                                    Text(
-                                        text = when (style) {
-                                            VisualizerStyle.SPECTRUM_BARS -> "ستون‌ها"
-                                            VisualizerStyle.WAVE_NEON -> "موج نئون"
-                                            VisualizerStyle.CIRCULAR_PULSE -> "پالس دایره‌ای"
-                                            VisualizerStyle.VINYL_RECORD -> "هاله"
-                                        },
-                                        color = if (isCur) NeonCyan else TextMuted,
-                                        fontSize = 11.sp,
-                                        fontWeight = if (isCur) FontWeight.Bold else FontWeight.Normal,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(if (isCur) SurfaceHighlight else Color.Transparent)
-                                            .clickable { visualizerStyle = style }
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
+                                // Visualizer Style Selector
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    VisualizerStyle.values().forEach { st ->
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(if (visualizerStyle == st) NeonViolet else SurfaceCard)
+                                                .clickable { visualizerStyle = st }
+                                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = when (st) {
+                                                    VisualizerStyle.SPECTRUM_BARS -> "ستون‌های نئون"
+                                                    VisualizerStyle.WAVE_NEON -> "موج صدا"
+                                                    VisualizerStyle.RADIAL_PULSE -> "پالس شعاعی"
+                                                },
+                                                color = if (visualizerStyle == st) Color.White else TextSecondary,
+                                                fontSize = 11.sp
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    PlayerCenterView.LYRICS -> {
-                        LyricsView(
-                            rawLyrics = song.lyrics,
-                            currentPositionMs = currentPositionMs,
-                            onSeekTo = onSeekTo,
-                            onSaveLyrics = onSaveLyrics,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
+                        NowPlayingTab.LYRICS -> {
+                            LyricsView(
+                                lrcContent = song.lrcContent,
+                                currentPositionMs = currentPositionMs,
+                                onSeekTo = onSeekTo,
+                                onSaveLyrics = onSaveLyrics,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
 
-                    PlayerCenterView.QUEUE -> {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(SurfaceCard.copy(alpha = 0.85f))
-                                .padding(12.dp)
-                        ) {
-                            item {
-                                Text(
-                                    text = "صف پخش (${playlist.size} آهنگ)",
-                                    color = NeonCyan,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    modifier = Modifier.padding(bottom = 8.dp)
-                                )
-                            }
-                            itemsIndexed(playlist) { index, itemSong ->
-                                val isCurrent = itemSong.id == song.id
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(if (isCurrent) SurfaceHighlight else Color.Transparent)
-                                        .clickable { onSelectQueueSong(itemSong) }
-                                        .padding(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${index + 1}",
-                                        color = if (isCurrent) NeonCyan else TextMuted,
-                                        fontSize = 12.sp,
-                                        modifier = Modifier.width(24.dp)
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
+                        NowPlayingTab.QUEUE -> {
+                            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                itemsIndexed(queue) { idx, qSong ->
+                                    val isCurrent = qSong.id == song.id
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(if (isCurrent) Color(0x33A855F7) else SurfaceCard)
+                                            .clickable { onSelectQueueItem(qSong) }
+                                            .padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Text(
-                                            text = itemSong.title,
-                                            color = if (isCurrent) NeonCyan else TextPrimary,
-                                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                                            fontSize = 13.sp,
-                                            maxLines = 1
+                                            text = "${idx + 1}",
+                                            color = if (isCurrent) NeonCyan else TextMuted,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.width(28.dp)
                                         )
-                                        Text(
-                                            text = itemSong.artist,
-                                            color = TextSecondary,
-                                            fontSize = 11.sp,
-                                            maxLines = 1
-                                        )
-                                    }
-                                    if (isCurrent && isPlaying) {
-                                        Icon(
-                                            imageVector = Icons.Default.GraphicEq,
-                                            contentDescription = "Playing",
-                                            tint = NeonCyan,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = qSong.title,
+                                                color = if (isCurrent) NeonCyan else TextPrimary,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 13.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = qSong.artist,
+                                                color = TextSecondary,
+                                                fontSize = 11.sp,
+                                                maxLines = 1
+                                            )
+                                        }
+                                        if (isCurrent) {
+                                            Icon(
+                                                imageVector = Icons.Default.GraphicEq,
+                                                contentDescription = "Playing",
+                                                tint = NeonCyan,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -433,337 +349,188 @@ fun NowPlayingSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Song Info & Action Icons
+            // Track Details & Actions Row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp),
+                    .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = song.title,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
-                        ),
                         color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = song.artist,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = NeonCyan,
+                        color = TextSecondary,
+                        fontSize = 14.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                // Add to Playlist
-                IconButton(onClick = onAddToPlaylist) {
+                IconButton(onClick = onFavoriteToggle) {
                     Icon(
-                        imageVector = Icons.Default.PlaylistAdd,
-                        contentDescription = "Add to playlist",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(24.dp)
+                        imageVector = if (song.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = if (song.isFavorite) NeonPink else TextSecondary,
+                        modifier = Modifier.size(28.dp)
                     )
                 }
 
-                // Favorite Heart Toggle
-                IconButton(
-                    onClick = onToggleFavorite,
-                    modifier = Modifier.testTag("favorite_toggle_btn")
-                ) {
+                IconButton(onClick = onAddToPlaylistClick) {
                     Icon(
-                        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                        contentDescription = "Favorite",
-                        tint = if (isFavorite) NeonPink else TextSecondary,
+                        imageVector = Icons.Default.PlaylistAdd,
+                        contentDescription = "Add to playlist",
+                        tint = NeonCyan,
                         modifier = Modifier.size(28.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            // Scrubber Slider
+            val progress = if (durationMs > 0) {
+                (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+            } else 0f
 
-            // Progress Slider
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Slider(
-                    value = currentSliderValue,
-                    onValueChange = {
-                        isDraggingSlider = true
-                        sliderDragPosition = it
-                    },
-                    onValueChangeFinished = {
-                        val targetMs = (sliderDragPosition * durationMs).toLong()
-                        onSeekTo(targetMs)
-                        isDraggingSlider = false
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("playback_slider"),
-                    colors = SliderDefaults.colors(
-                        thumbColor = NeonCyan,
-                        activeTrackColor = NeonCyan,
-                        inactiveTrackColor = SurfaceHighlight
-                    )
+            Slider(
+                value = progress,
+                onValueChange = { frac ->
+                    onSeekTo((frac * durationMs).toLong())
+                },
+                colors = SliderDefaults.colors(
+                    thumbColor = NeonCyan,
+                    activeTrackColor = NeonViolet,
+                    inactiveTrackColor = Color(0x33FFFFFF)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("track_slider")
+            )
+
+            // Timestamps
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = formatMs(currentPositionMs),
+                    color = TextSecondary,
+                    fontSize = 12.sp
                 )
-
-                // Time labels
-                val displayPosMs = if (isDraggingSlider) (sliderDragPosition * durationMs).toLong() else currentPositionMs
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = formatDuration(displayPosMs),
-                        color = TextMuted,
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        text = formatDuration(durationMs),
-                        color = TextMuted,
-                        fontSize = 12.sp
-                    )
-                }
+                Text(
+                    text = formatMs(durationMs),
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Main Playback Controls Row
+            // Player Controls Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                // Shuffle Mode
-                IconButton(
-                    onClick = onToggleShuffle,
-                    modifier = Modifier.size(44.dp).testTag("shuffle_btn")
-                ) {
+                IconButton(onClick = onShuffleToggle) {
                     Icon(
                         imageVector = Icons.Default.Shuffle,
                         contentDescription = "Shuffle",
-                        tint = if (isShuffle) NeonCyan else TextMuted,
-                        modifier = Modifier.size(22.dp)
+                        tint = if (isShuffle) NeonPink else TextMuted
                     )
                 }
 
-                // Rewind 10 seconds
                 IconButton(
-                    onClick = onSeekBackward,
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Replay10,
-                        contentDescription = "Rewind 10s",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
-
-                // Previous Track
-                IconButton(
-                    onClick = onPrevious,
-                    modifier = Modifier.size(52.dp).testTag("prev_track_btn")
+                    onClick = onPreviousClick,
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipPrevious,
                         contentDescription = "Previous",
                         tint = TextPrimary,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(32.dp)
                     )
                 }
 
-                // Giant Glowing Play / Pause Button
+                // Main Play/Pause Button
                 Box(
                     modifier = Modifier
-                        .size(70.dp)
-                        .shadow(elevation = 16.dp, shape = CircleShape, spotColor = NeonViolet)
+                        .size(64.dp)
                         .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                colors = listOf(NeonViolet, NeonCyan)
-                            )
-                        )
-                        .clickable { onTogglePlayPause() }
-                        .testTag("full_play_pause_btn"),
+                        .background(Brush.linearGradient(listOf(NeonViolet, NeonPink)))
+                        .border(2.dp, NeonCyan, CircleShape)
+                        .clickable { onPlayPauseClick() }
+                        .testTag("sheet_play_pause_btn"),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (isPlaying) "Pause" else "Play",
                         tint = Color.White,
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(36.dp)
                     )
                 }
 
-                // Next Track
                 IconButton(
-                    onClick = onNext,
-                    modifier = Modifier.size(52.dp).testTag("next_track_btn")
+                    onClick = onNextClick,
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipNext,
                         contentDescription = "Next",
                         tint = TextPrimary,
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(32.dp)
                     )
                 }
 
-                // Fast Forward 10 seconds
-                IconButton(
-                    onClick = onSeekForward,
-                    modifier = Modifier.size(44.dp)
-                ) {
+                IconButton(onClick = onRepeatToggle) {
                     Icon(
-                        imageVector = Icons.Default.Forward10,
-                        contentDescription = "Forward 10s",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(26.dp)
-                    )
-                }
-
-                // Repeat Mode (Off, All, One)
-                IconButton(
-                    onClick = onToggleRepeat,
-                    modifier = Modifier.size(44.dp).testTag("repeat_btn")
-                ) {
-                    when (repeatMode) {
-                        RepeatMode.OFF -> Icon(Icons.Default.Repeat, contentDescription = "Repeat Off", tint = TextMuted, modifier = Modifier.size(22.dp))
-                        RepeatMode.ALL -> Icon(Icons.Default.Repeat, contentDescription = "Repeat All", tint = NeonCyan, modifier = Modifier.size(22.dp))
-                        RepeatMode.ONE -> Icon(Icons.Default.RepeatOne, contentDescription = "Repeat One", tint = NeonPink, modifier = Modifier.size(22.dp))
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Bottom Sub-Bar: Playback Speed Selector & Sound Effects
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                // Speed Selector Pill
-                Box {
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(SurfaceElevated)
-                            .clickable { showSpeedMenu = true }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Speed,
-                            contentDescription = null,
-                            tint = NeonViolet,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "${playbackSpeed}x سرعت",
-                            color = TextPrimary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showSpeedMenu,
-                        onDismissRequest = { showSpeedMenu = false },
-                        modifier = Modifier.background(SurfaceCard)
-                    ) {
-                        listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = "${speed}x",
-                                        color = if (playbackSpeed == speed) NeonCyan else TextPrimary,
-                                        fontWeight = if (playbackSpeed == speed) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                },
-                                onClick = {
-                                    onSetPlaybackSpeed(speed)
-                                    showSpeedMenu = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Equalizer button pill
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceElevated)
-                        .clickable { onOpenEqualizer() }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Equalizer,
-                        contentDescription = null,
-                        tint = NeonCyan,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "اکولایزر (EQ)",
-                        color = TextPrimary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
+                        imageVector = when (repeatMode) {
+                            RepeatMode.ONE -> Icons.Default.RepeatOne
+                            else -> Icons.Default.Repeat
+                        },
+                        contentDescription = "Repeat",
+                        tint = if (repeatMode != RepeatMode.OFF) NeonCyan else TextMuted
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }
 
 @Composable
-private fun CenterViewPill(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    isSelected: Boolean,
+private fun TabPill(
+    title: String,
+    selected: Boolean,
     onClick: () -> Unit
 ) {
-    Row(
+    Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (isSelected) NeonViolet else Color.Transparent)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) NeonViolet else Color.Transparent)
             .clickable { onClick() }
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (isSelected) Color.White else TextSecondary,
-            modifier = Modifier.size(14.dp)
-        )
-        Spacer(modifier = Modifier.width(4.dp))
         Text(
-            text = label,
-            color = if (isSelected) Color.White else TextSecondary,
-            fontSize = 11.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+            text = title,
+            color = if (selected) Color.White else TextSecondary,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
         )
     }
 }
 
-private fun formatDuration(ms: Long): String {
-    val totalSec = (ms / 1000).coerceAtLeast(0)
-    val minutes = totalSec / 60
-    val seconds = totalSec % 60
-    return "%02d:%02d".format(minutes, seconds)
+private fun formatMs(ms: Long): String {
+    val totalSec = ms / 1000
+    val min = totalSec / 60
+    val sec = totalSec % 60
+    return "%02d:%02d".format(min, sec)
 }

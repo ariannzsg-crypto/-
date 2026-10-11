@@ -1,6 +1,6 @@
 {
   "name": "Ava Player",
-  "description": "موزیک پلیر پیشرفته و زیبا با طراحی مدرن، اکولایزر، ویژوالایزر، متن ترانه و پلی‌لیست",
+  "description": "موزیک پلیر پیشرفته و هوشمند با اسکن خودکار فایل‌ها، متن همگام‌سازی شده، اکولایزر و ویژوالایزر",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

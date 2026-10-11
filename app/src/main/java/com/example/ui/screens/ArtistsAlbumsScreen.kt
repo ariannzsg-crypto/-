@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,24 +16,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -46,185 +36,107 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.R
 import com.example.data.model.Song
 import com.example.ui.theme.NeonCyan
-import com.example.ui.theme.NeonPink
 import com.example.ui.theme.NeonViolet
 import com.example.ui.theme.SurfaceCard
 import com.example.ui.theme.SurfaceElevated
-import com.example.ui.theme.SurfaceHighlight
-import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
 @Composable
 fun ArtistsScreen(
     songs: List<Song>,
-    currentSong: Song?,
-    isPlaying: Boolean,
-    favoriteIds: Set<String>,
-    onPlaySong: (Song, List<Song>) -> Unit,
-    onToggleFavorite: (String) -> Unit,
+    onPlaySong: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedArtist by remember { mutableStateOf<String?>(null) }
-
-    val artistsMap = remember(songs) {
+    val artistGroups = remember(songs) {
         songs.groupBy { it.artist }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-    ) {
-        if (selectedArtist != null) {
-            val artistSongs = artistsMap[selectedArtist] ?: emptyList()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+    var selectedArtist by remember { mutableStateOf<String?>(null) }
+
+    if (selectedArtist != null) {
+        val artistSongs = artistGroups[selectedArtist] ?: emptyList()
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { selectedArtist = null }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = selectedArtist ?: "",
-                        color = TextPrimary,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "${artistSongs.size} قطعه موسیقی",
-                        color = TextSecondary,
-                        fontSize = 12.sp
-                    )
-                }
-                if (artistSongs.isNotEmpty()) {
-                    IconButton(
-                        onClick = { onPlaySong(artistSongs.first(), artistSongs) },
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(NeonViolet)
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.White)
-                    }
-                }
+                Text(
+                    text = selectedArtist ?: "",
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(artistSongs) { song ->
-                    SongItemRow(
-                        song = song,
-                        isCurrent = currentSong?.id == song.id,
-                        isPlaying = isPlaying,
-                        isFavorite = favoriteIds.contains(song.id),
-                        onClick = { onPlaySong(song, artistSongs) },
-                        onToggleFavorite = { onToggleFavorite(song.id) },
-                        onAddToPlaylist = {}
-                    )
-                }
-                item {
-                    Spacer(modifier = Modifier.height(80.dp))
-                }
-            }
-        } else {
             Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "هنرمندان (${artistsMap.size})",
-                color = TextSecondary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(artistsMap.keys.toList()) { artistName ->
-                    val artistTracks = artistsMap[artistName] ?: emptyList()
-                    val sampleSong = artistTracks.firstOrNull()
-
-                    Card(
+            LazyColumn {
+                items(artistSongs) { song ->
+                    SongDrillItem(song = song, onClick = { onPlaySong(song) })
+                }
+                item { Spacer(modifier = Modifier.height(100.dp)) }
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .testTag("artists_screen")
+        ) {
+            items(artistGroups.keys.toList()) { artist ->
+                val count = artistGroups[artist]?.size ?: 0
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCard)
+                        .clickable { selectedArtist = artist }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedArtist = artistName },
-                        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                        shape = RoundedCornerShape(20.dp)
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(SurfaceElevated)
+                            .border(1.dp, NeonViolet, CircleShape),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(76.dp)
-                                    .clip(CircleShape)
-                                    .background(SurfaceElevated)
-                                    .border(2.dp, NeonViolet, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                if (sampleSong?.albumArtRes != null) {
-                                    Image(
-                                        painter = painterResource(id = sampleSong.albumArtRes),
-                                        contentDescription = artistName,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.Person,
-                                        contentDescription = null,
-                                        tint = NeonViolet,
-                                        modifier = Modifier.size(36.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            Text(
-                                text = artistName,
-                                color = TextPrimary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "${artistTracks.size} آهنگ",
-                                color = TextSecondary,
-                                fontSize = 11.sp
-                            )
-                        }
+                        Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = NeonViolet)
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = artist,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = "$count آهنگ",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
                     }
                 }
-
-                item {
-                    Spacer(modifier = Modifier.height(80.dp))
-                }
             }
+            item { Spacer(modifier = Modifier.height(100.dp)) }
         }
     }
 }
@@ -232,173 +144,132 @@ fun ArtistsScreen(
 @Composable
 fun AlbumsScreen(
     songs: List<Song>,
-    currentSong: Song?,
-    isPlaying: Boolean,
-    favoriteIds: Set<String>,
-    onPlaySong: (Song, List<Song>) -> Unit,
-    onToggleFavorite: (String) -> Unit,
+    onPlaySong: (Song) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedAlbum by remember { mutableStateOf<String?>(null) }
-
-    val albumsMap = remember(songs) {
+    val albumGroups = remember(songs) {
         songs.groupBy { it.album }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-    ) {
-        if (selectedAlbum != null) {
-            val albumSongs = albumsMap[selectedAlbum] ?: emptyList()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+    var selectedAlbum by remember { mutableStateOf<String?>(null) }
+
+    if (selectedAlbum != null) {
+        val albumSongs = albumGroups[selectedAlbum] ?: emptyList()
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { selectedAlbum = null }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = selectedAlbum ?: "",
-                        color = TextPrimary,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "${albumSongs.size} قطعه • ${albumSongs.firstOrNull()?.artist ?: ""}",
-                        color = TextSecondary,
-                        fontSize = 12.sp
-                    )
-                }
-                if (albumSongs.isNotEmpty()) {
-                    IconButton(
-                        onClick = { onPlaySong(albumSongs.first(), albumSongs) },
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .background(NeonCyan)
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.Black)
-                    }
-                }
+                Text(
+                    text = selectedAlbum ?: "",
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(albumSongs) { song ->
-                    SongItemRow(
-                        song = song,
-                        isCurrent = currentSong?.id == song.id,
-                        isPlaying = isPlaying,
-                        isFavorite = favoriteIds.contains(song.id),
-                        onClick = { onPlaySong(song, albumSongs) },
-                        onToggleFavorite = { onToggleFavorite(song.id) },
-                        onAddToPlaylist = {}
-                    )
-                }
-                item {
-                    Spacer(modifier = Modifier.height(80.dp))
-                }
-            }
-        } else {
             Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "آلبوم‌ها (${albumsMap.size})",
-                color = TextSecondary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(albumsMap.keys.toList()) { albumName ->
-                    val albumTracks = albumsMap[albumName] ?: emptyList()
-                    val sampleSong = albumTracks.firstOrNull()
-
-                    Card(
+            LazyColumn {
+                items(albumSongs) { song ->
+                    SongDrillItem(song = song, onClick = { onPlaySong(song) })
+                }
+                item { Spacer(modifier = Modifier.height(100.dp)) }
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .testTag("albums_screen")
+        ) {
+            items(albumGroups.keys.toList()) { album ->
+                val albumSongs = albumGroups[album] ?: emptyList()
+                val firstSong = albumSongs.firstOrNull()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCard)
+                        .clickable { selectedAlbum = album }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedAlbum = albumName },
-                        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                        shape = RoundedCornerShape(16.dp)
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                        if (firstSong?.albumArtRes != null) {
+                            Image(
+                                painter = painterResource(id = firstSong.albumArtRes),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else if (firstSong?.albumArtUri != null) {
+                            AsyncImage(
+                                model = firstSong.albumArtUri,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(1f)
+                                    .fillMaxSize()
                                     .background(SurfaceElevated),
                                 contentAlignment = Alignment.Center
                             ) {
-                                if (sampleSong?.albumArtRes != null) {
-                                    Image(
-                                        painter = painterResource(id = sampleSong.albumArtRes),
-                                        contentDescription = albumName,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                } else if (sampleSong?.albumArtUri != null) {
-                                    AsyncImage(
-                                        model = sampleSong.albumArtUri,
-                                        contentDescription = albumName,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.Album,
-                                        contentDescription = null,
-                                        tint = NeonCyan,
-                                        modifier = Modifier.size(44.dp)
-                                    )
-                                }
-                            }
-
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text(
-                                    text = albumName,
-                                    color = TextPrimary,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = sampleSong?.artist ?: "Various Artists",
-                                    color = TextSecondary,
-                                    fontSize = 11.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "${albumTracks.size} آهنگ",
-                                    color = NeonViolet,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
+                                Icon(imageVector = Icons.Default.Album, contentDescription = null, tint = NeonCyan)
                             }
                         }
                     }
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(80.dp))
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = album,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp
+                        )
+                        Text(
+                            text = "${firstSong?.artist ?: "Unknown"} • ${albumSongs.size} آهنگ",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
                 }
             }
+            item { Spacer(modifier = Modifier.height(100.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun SongDrillItem(
+    song: Song,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(SurfaceCard)
+            .clickable { onClick() }
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = song.title, color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(text = song.artist, color = TextSecondary, fontSize = 12.sp)
         }
     }
 }

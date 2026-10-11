@@ -7,7 +7,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -17,8 +18,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.dp
 import com.example.data.model.VisualizerStyle
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonPink
@@ -29,43 +30,44 @@ import kotlin.math.sin
 
 @Composable
 fun AudioVisualizer(
-    amplitudes: FloatArray,
     isPlaying: Boolean,
     style: VisualizerStyle,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier.fillMaxWidth().height(120.dp)
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "viz")
-    val phase by infiniteTransition.animateFloat(
+    val transition = rememberInfiniteTransition(label = "vis_trans")
+    val phase by transition.animateFloat(
         initialValue = 0f,
-        targetValue = 2f * PI.toFloat(),
+        targetValue = if (isPlaying) 2 * PI.toFloat() else 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2400, easing = LinearEasing),
+            animation = tween(2400, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "phase"
     )
 
-    Canvas(modifier = modifier.fillMaxSize()) {
-        val width = size.width
-        val height = size.height
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
 
         when (style) {
             VisualizerStyle.SPECTRUM_BARS -> {
-                val numBars = amplitudes.size.coerceAtLeast(8)
-                val spacing = 6f
-                val barWidth = (width - (numBars - 1) * spacing) / numBars
-
+                val barCount = 32
+                val barWidth = (w / barCount) * 0.65f
+                val spacing = (w / barCount) * 0.35f
                 val gradient = Brush.verticalGradient(
-                    colors = listOf(NeonPink, NeonViolet, NeonCyan),
-                    startY = 0f,
-                    endY = height
+                    colors = listOf(NeonPink, NeonViolet, NeonCyan)
                 )
 
-                for (i in 0 until numBars) {
-                    val amp = if (isPlaying) amplitudes.getOrElse(i) { 0.1f } else 0.08f
-                    val barHeight = (height * amp * 0.95f).coerceAtLeast(8f)
-                    val x = i * (barWidth + spacing)
-                    val y = height - barHeight
+                for (i in 0 until barCount) {
+                    val x = i * (barWidth + spacing) + spacing / 2
+                    val multiplier = if (isPlaying) {
+                        (sin(phase * 2f + i * 0.45f) * 0.4f +
+                         cos(phase * 1.5f + i * 0.25f) * 0.4f + 0.2f).coerceIn(0.12f, 0.95f)
+                    } else {
+                        0.08f
+                    }
+                    val barHeight = h * multiplier
+                    val y = h - barHeight
 
                     drawRoundRect(
                         brush = gradient,
@@ -77,107 +79,72 @@ fun AudioVisualizer(
             }
 
             VisualizerStyle.WAVE_NEON -> {
-                val path = Path()
-                val midY = height / 2f
-                val points = 30
-                val stepX = width / (points - 1)
+                val path1 = Path()
+                val path2 = Path()
+                val points = 60
 
-                val primaryBrush = Brush.horizontalGradient(
-                    colors = listOf(NeonCyan, NeonViolet, NeonPink)
-                )
+                path1.moveTo(0f, h / 2)
+                path2.moveTo(0f, h / 2)
 
-                path.moveTo(0f, midY)
-                for (i in 0 until points) {
-                    val x = i * stepX
-                    val ampIndex = (i % amplitudes.size)
-                    val amp = if (isPlaying) amplitudes[ampIndex] else 0.05f
-                    val waveOffset = sin((i * 0.4f) + phase) * (height * 0.35f * amp)
-                    val y = midY + waveOffset
-                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                for (i in 0..points) {
+                    val x = (w / points) * i
+                    val waveAmp = if (isPlaying) h * 0.35f else h * 0.04f
+                    val y1 = h / 2 + sin(phase + i * 0.22f) * waveAmp
+                    val y2 = h / 2 + cos(phase * 1.3f + i * 0.18f) * (waveAmp * 0.75f)
+
+                    path1.lineTo(x, y1)
+                    path2.lineTo(x, y2)
                 }
 
                 drawPath(
-                    path = path,
-                    brush = primaryBrush,
-                    style = Stroke(width = 6f, cap = StrokeCap.Round)
+                    path = path1,
+                    brush = Brush.horizontalGradient(listOf(NeonCyan, NeonViolet, NeonPink)),
+                    style = Stroke(width = 4.dp.toPx())
                 )
-
-                // Secondary soft harmonic wave
-                val glowPath = Path()
-                glowPath.moveTo(0f, midY)
-                for (i in 0 until points) {
-                    val x = i * stepX
-                    val ampIndex = ((i + 2) % amplitudes.size)
-                    val amp = if (isPlaying) amplitudes[ampIndex] else 0.03f
-                    val waveOffset = cos((i * 0.3f) - phase) * (height * 0.22f * amp)
-                    val y = midY + waveOffset
-                    if (i == 0) glowPath.moveTo(x, y) else glowPath.lineTo(x, y)
-                }
-
                 drawPath(
-                    path = glowPath,
-                    color = NeonCyan.copy(alpha = 0.5f),
-                    style = Stroke(width = 3f, cap = StrokeCap.Round)
+                    path = path2,
+                    brush = Brush.horizontalGradient(listOf(NeonPink, NeonViolet, NeonCyan)),
+                    style = Stroke(width = 2.5.dp.toPx())
                 )
             }
 
-            VisualizerStyle.CIRCULAR_PULSE -> {
-                val center = Offset(width / 2f, height / 2f)
-                val baseRadius = (minOf(width, height) / 3.2f)
+            VisualizerStyle.RADIAL_PULSE -> {
+                val centerX = w / 2
+                val centerY = h / 2
+                val baseRadius = (minOf(w, h) * 0.28f)
 
-                val avgAmp = if (isPlaying) amplitudes.average().toFloat() else 0.08f
+                val pulse = if (isPlaying) sin(phase * 2) * 12f else 0f
+                val radius = baseRadius + pulse
 
-                // Outer neon pulse ring
                 drawCircle(
                     brush = Brush.radialGradient(
-                        colors = listOf(Color.Transparent, NeonViolet.copy(alpha = 0.3f), NeonCyan.copy(alpha = 0.6f)),
-                        center = center,
-                        radius = baseRadius * (1f + avgAmp * 0.8f)
+                        colors = listOf(NeonViolet.copy(alpha = 0.5f), Color.Transparent),
+                        center = Offset(centerX, centerY),
+                        radius = radius * 1.5f
                     ),
-                    radius = baseRadius * (1f + avgAmp * 0.8f),
-                    center = center,
-                    style = Stroke(width = 5f)
+                    radius = radius * 1.4f,
+                    center = Offset(centerX, centerY)
                 )
 
-                // Circular frequency spikes
-                val spikes = 24
-                for (i in 0 until spikes) {
-                    val angle = (i.toFloat() / spikes) * 2f * PI.toFloat() + phase * 0.2f
-                    val amp = if (isPlaying) amplitudes[i % amplitudes.size] else 0.1f
-                    val spikeLength = (baseRadius * 0.5f * amp).coerceAtLeast(10f)
+                drawCircle(
+                    color = NeonCyan,
+                    radius = radius,
+                    center = Offset(centerX, centerY),
+                    style = Stroke(width = 3.dp.toPx())
+                )
 
-                    val startX = center.x + cos(angle) * baseRadius
-                    val startY = center.y + sin(angle) * baseRadius
-                    val endX = center.x + cos(angle) * (baseRadius + spikeLength)
-                    val endY = center.y + sin(angle) * (baseRadius + spikeLength)
-
-                    drawLine(
-                        brush = Brush.linearGradient(
-                            colors = listOf(NeonViolet, NeonPink),
-                            start = Offset(startX, startY),
-                            end = Offset(endX, endY)
-                        ),
-                        start = Offset(startX, startY),
-                        end = Offset(endX, endY),
-                        strokeWidth = 5f,
-                        cap = StrokeCap.Round
+                // Particle dots around circle
+                val particles = 12
+                for (p in 0 until particles) {
+                    val angle = (phase + (2 * PI / particles) * p).toFloat()
+                    val px = centerX + cos(angle) * (radius + 16f)
+                    val py = centerY + sin(angle) * (radius + 16f)
+                    drawCircle(
+                        color = NeonPink,
+                        radius = 4.dp.toPx(),
+                        center = Offset(px, py)
                     )
                 }
-            }
-
-            VisualizerStyle.VINYL_RECORD -> {
-                // Background subtle ambient glow
-                val center = Offset(width / 2f, height / 2f)
-                val avgAmp = if (isPlaying) amplitudes.average().toFloat() else 0.05f
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(NeonViolet.copy(alpha = 0.25f * avgAmp), Color.Transparent),
-                        center = center,
-                        radius = width * 0.45f
-                    ),
-                    center = center,
-                    radius = width * 0.45f
-                )
             }
         }
     }

@@ -5,9 +5,6 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.audio.MusicPlayerManager
-import com.example.data.local.entity.AlbumEntity
-import com.example.data.local.entity.ArtistEntity
-import com.example.data.model.EqualizerState
 import com.example.data.model.Playlist
 import com.example.data.model.RepeatMode
 import com.example.data.model.Song
@@ -16,11 +13,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-enum class NavigationTab {
+enum class MainTab {
     TRACKS,
     PLAYLISTS,
     ARTISTS,
@@ -33,106 +29,96 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = MusicRepository(application)
     private val playerManager = MusicPlayerManager(application)
 
-    // Reactive StateFlows from Room database via repository
-    val songs: StateFlow<List<Song>> = repository.songs
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val songs: StateFlow<List<Song>> = repository.songsFlow
+    val playlists: StateFlow<List<Playlist>> = repository.playlistsFlow
+    val favoriteSongIds: StateFlow<Set<String>> = repository.favoritesFlow
+    val recentlyPlayedIds: StateFlow<List<String>> = repository.recentlyPlayedFlow
 
-    val playlists: StateFlow<List<Playlist>> = repository.playlists
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val albums: StateFlow<List<AlbumEntity>> = repository.albums
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val artists: StateFlow<List<ArtistEntity>> = repository.artists
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val folders: StateFlow<List<String>> = repository.folders
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val favoriteIds: StateFlow<Set<String>> = songs
-        .map { list -> list.filter { it.isFavorite }.map { it.id }.toSet() }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
-
-    val recentlyPlayedIds: StateFlow<List<String>> = repository.recentlyPlayedIds
-
-    // Playback flows from player manager
     val currentSong: StateFlow<Song?> = playerManager.currentSong
     val isPlaying: StateFlow<Boolean> = playerManager.isPlaying
-    val isAutoPlay: StateFlow<Boolean> = playerManager.isAutoPlay
     val currentPositionMs: StateFlow<Long> = playerManager.currentPositionMs
     val durationMs: StateFlow<Long> = playerManager.durationMs
-    val playbackSpeed: StateFlow<Float> = playerManager.playbackSpeed
     val repeatMode: StateFlow<RepeatMode> = playerManager.repeatMode
     val isShuffle: StateFlow<Boolean> = playerManager.isShuffle
-    val currentPlaylist: StateFlow<List<Song>> = playerManager.playlist
-    val equalizerState: StateFlow<EqualizerState> = playerManager.equalizerState
-    val sleepTimerSeconds: StateFlow<Int?> = playerManager.sleepTimerSeconds
-    val visualizerAmplitudes: StateFlow<FloatArray> = playerManager.visualizerAmplitudes
+    val queue: StateFlow<List<Song>> = playerManager.queue
+    val sleepTimerRemainingSeconds: StateFlow<Int?> = playerManager.sleepTimerRemainingSeconds
 
-    // UI Navigation & Dialog States
-    private val _currentTab = MutableStateFlow(NavigationTab.TRACKS)
-    val currentTab: StateFlow<NavigationTab> = _currentTab.asStateFlow()
+    // Audio effects
+    val equalizerEnabled: StateFlow<Boolean> = playerManager.equalizerEnabled
+    val equalizerPresets: StateFlow<List<String>> = playerManager.equalizerPresets
+    val currentPreset: StateFlow<String> = playerManager.currentPreset
+    val bandFrequencies: StateFlow<List<Int>> = playerManager.bandFrequencies
+    val bandLevels: StateFlow<Map<Short, Short>> = playerManager.bandLevels
+    val bassBoostStrength: StateFlow<Int> = playerManager.bassBoostStrength
+    val virtualizerStrength: StateFlow<Int> = playerManager.virtualizerStrength
 
-    private val _isNowPlayingSheetOpen = MutableStateFlow(false)
-    val isNowPlayingSheetOpen: StateFlow<Boolean> = _isNowPlayingSheetOpen.asStateFlow()
+    // UI Navigation State
+    private val _currentTab = MutableStateFlow(MainTab.TRACKS)
+    val currentTab: StateFlow<MainTab> = _currentTab.asStateFlow()
 
-    private val _showSleepTimerDialog = MutableStateFlow(false)
-    val showSleepTimerDialog: StateFlow<Boolean> = _showSleepTimerDialog.asStateFlow()
+    private val _isNowPlayingOpen = MutableStateFlow(false)
+    val isNowPlayingOpen: StateFlow<Boolean> = _isNowPlayingOpen.asStateFlow()
 
+    private val _isScanning = MutableStateFlow(false)
+    val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
+
+    // Dialogs
     private val _showCreatePlaylistDialog = MutableStateFlow(false)
     val showCreatePlaylistDialog: StateFlow<Boolean> = _showCreatePlaylistDialog.asStateFlow()
 
     private val _songForAddToPlaylist = MutableStateFlow<Song?>(null)
     val songForAddToPlaylist: StateFlow<Song?> = _songForAddToPlaylist.asStateFlow()
 
+    private val _showSleepTimerDialog = MutableStateFlow(false)
+    val showSleepTimerDialog: StateFlow<Boolean> = _showSleepTimerDialog.asStateFlow()
+
     init {
+        playerManager.onSongFinished = { song ->
+            repository.incrementPlayCount(song.id)
+        }
+
+        // Auto-initialize queue once songs are loaded
         viewModelScope.launch {
-            repository.initialize()
+            songs.collect { songList ->
+                if (songList.isNotEmpty() && currentSong.value == null) {
+                    playerManager.setQueue(songList, startIndex = 0, autoPlay = false)
+                }
+            }
         }
     }
 
-    fun selectTab(tab: NavigationTab) {
+    fun setTab(tab: MainTab) {
         _currentTab.value = tab
     }
 
-    fun setNowPlayingSheetOpen(open: Boolean) {
-        _isNowPlayingSheetOpen.value = open
+    fun openNowPlaying() {
+        _isNowPlayingOpen.value = true
     }
 
-    fun setShowSleepTimerDialog(show: Boolean) {
-        _showSleepTimerDialog.value = show
+    fun closeNowPlaying() {
+        _isNowPlayingOpen.value = false
     }
 
-    fun setShowCreatePlaylistDialog(show: Boolean) {
-        _showCreatePlaylistDialog.value = show
+    fun playSong(song: Song) {
+        val currentQueue = songs.value
+        val index = currentQueue.indexOfFirst { it.id == song.id }
+        if (index >= 0) {
+            playerManager.setQueue(currentQueue, index, autoPlay = true)
+        } else {
+            playerManager.playSong(song, startPlaying = true)
+        }
+        repository.incrementPlayCount(song.id)
     }
 
-    fun setSongForAddToPlaylist(song: Song?) {
-        _songForAddToPlaylist.value = song
-    }
-
-    // Playback control
-    fun playSong(song: Song, playlist: List<Song>) {
-        playerManager.playSong(song, playlist)
-        viewModelScope.launch {
-            repository.recordPlay(song.id)
+    fun playSongsList(list: List<Song>, startIndex: Int = 0) {
+        if (list.isNotEmpty()) {
+            playerManager.setQueue(list, startIndex, autoPlay = true)
+            repository.incrementPlayCount(list[startIndex].id)
         }
     }
 
     fun togglePlayPause() {
         playerManager.togglePlayPause()
-    }
-
-    fun seekTo(positionMs: Long) {
-        playerManager.seekTo(positionMs)
-    }
-
-    fun seekForward() {
-        playerManager.seekForward(10000L)
-    }
-
-    fun seekBackward() {
-        playerManager.seekBackward(10000L)
     }
 
     fun playNext() {
@@ -143,88 +129,111 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         playerManager.playPrevious()
     }
 
-    fun toggleShuffle() {
-        playerManager.toggleShuffle()
+    fun seekTo(positionMs: Long) {
+        playerManager.seekTo(positionMs)
+    }
+
+    fun toggleFavorite(songId: String) {
+        repository.toggleFavorite(songId)
     }
 
     fun toggleRepeat() {
         playerManager.toggleRepeatMode()
     }
 
-    fun toggleAutoPlay() {
-        playerManager.toggleAutoPlay()
+    fun toggleShuffle() {
+        playerManager.toggleShuffle()
     }
 
-    fun playAllAuto(songsList: List<Song>) {
-        if (songsList.isNotEmpty()) {
-            playerManager.playSong(songsList.first(), songsList)
-        }
-    }
-
-    fun setPlaybackSpeed(speed: Float) {
-        playerManager.setPlaybackSpeed(speed)
-    }
-
-    fun updateEqualizer(state: EqualizerState) {
-        playerManager.updateEqualizer(state)
-    }
-
-    fun setSleepTimer(minutes: Int) {
+    fun setSleepTimer(minutes: Int?) {
         playerManager.setSleepTimer(minutes)
     }
 
-    fun cancelSleepTimer() {
-        playerManager.cancelSleepTimer()
+    fun openSleepTimerDialog() {
+        _showSleepTimerDialog.value = true
     }
 
-    // Room Repository operations
-    fun toggleFavorite(songId: String) {
-        val isFav = favoriteIds.value.contains(songId)
-        viewModelScope.launch {
-            repository.toggleFavorite(songId, isFav)
+    fun closeSleepTimerDialog() {
+        _showSleepTimerDialog.value = false
+    }
+
+    fun saveLyrics(songId: String, lrcText: String) {
+        repository.updateLyrics(songId, lrcText)
+        // Also update in-memory current song if matched
+        val cur = currentSong.value
+        if (cur?.id == songId) {
+            // refresh
         }
+    }
+
+    fun scanStorage() {
+        viewModelScope.launch {
+            _isScanning.value = true
+            try {
+                repository.scanDevice()
+            } finally {
+                _isScanning.value = false
+            }
+        }
+    }
+
+    fun importFromFolder(uri: Uri) {
+        viewModelScope.launch {
+            _isScanning.value = true
+            try {
+                repository.importFromFolder(uri)
+            } finally {
+                _isScanning.value = false
+            }
+        }
+    }
+
+    // Playlist Dialog handlers
+    fun openCreatePlaylistDialog() {
+        _showCreatePlaylistDialog.value = true
+    }
+
+    fun closeCreatePlaylistDialog() {
+        _showCreatePlaylistDialog.value = false
     }
 
     fun createPlaylist(name: String) {
-        viewModelScope.launch {
-            repository.createPlaylist(name)
-        }
+        repository.createPlaylist(name)
+        _showCreatePlaylistDialog.value = false
     }
 
-    fun addSongToPlaylist(playlistId: String, songId: String) {
-        viewModelScope.launch {
-            repository.addSongToPlaylist(playlistId, songId)
-        }
+    fun deletePlaylist(id: Long) {
+        repository.deletePlaylist(id)
     }
 
-    fun deletePlaylist(playlistId: String) {
-        viewModelScope.launch {
-            repository.deletePlaylist(playlistId)
-        }
+    fun openAddToPlaylistDialog(song: Song) {
+        _songForAddToPlaylist.value = song
     }
 
-    fun importAudioFile(uri: Uri, displayName: String) {
-        viewModelScope.launch {
-            repository.addImportedSong(uri, displayName)
-        }
+    fun closeAddToPlaylistDialog() {
+        _songForAddToPlaylist.value = null
     }
 
-    fun scanDeviceAudio() {
-        viewModelScope.launch {
-            repository.refreshDeviceAudio()
-        }
+    fun addSongToPlaylist(playlistId: Long, songId: String) {
+        repository.addSongToPlaylist(playlistId, songId)
+        _songForAddToPlaylist.value = null
     }
 
-    fun scanFolder(treeUri: Uri) {
-        viewModelScope.launch {
-            repository.scanFolderTreeUri(treeUri)
-        }
+    // EQ controls
+    fun setEqualizerPreset(preset: String) {
+        playerManager.setEqualizerPreset(preset)
     }
 
-    fun saveLyrics(songId: String, lyrics: String) {
-        viewModelScope.launch {
-            repository.updateLyrics(songId, lyrics)
-        }
+    fun setBandLevel(band: Short, level: Short) {
+        playerManager.setBandLevel(band, level)
+    }
+
+    fun setBassBoost(strength: Int) {
+        playerManager.setBassBoost(strength)
+    }
+
+    fun setVirtualizer(strength: Int) {
+        playerManager.setVirtualizer(strength)
     }
 
     override fun onCleared() {

@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -15,19 +14,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -36,185 +31,156 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.example.R
 import com.example.data.model.Song
 import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonViolet
-import com.example.ui.theme.SurfaceHighlight
-import com.example.ui.theme.VinylCenterGold
-import com.example.ui.theme.VinylGrooveDark
 
 @Composable
 fun VinylTurntable(
     song: Song?,
     isPlaying: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier.size(280.dp)
 ) {
-    // Continuous rotation for vinyl when playing
-    val infiniteTransition = rememberInfiniteTransition(label = "turntable_rotation")
+    val infiniteTransition = rememberInfiniteTransition(label = "vinyl_rot")
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 8000, easing = LinearEasing),
+            animation = tween(8000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "vinyl_angle"
+        label = "rot"
     )
 
-    val currentRotation = if (isPlaying) rotation else 0f
-
-    // Animated tone-arm angle (rests off-record at -25 deg, plays on record at 8 deg)
     val tonearmAngle by animateFloatAsState(
-        targetValue = if (isPlaying) 12f else -25f,
-        animationSpec = spring(dampingRatio = 0.75f, stiffness = 100f),
-        label = "tonearm_angle"
+        targetValue = if (isPlaying) 28f else 0f,
+        animationSpec = tween(600),
+        label = "arm"
     )
 
     Box(
-        modifier = modifier.size(280.dp),
+        modifier = modifier,
         contentAlignment = Alignment.Center
     ) {
-        // Vinyl Record Disc
+        // Outer Vinyl Disc with Grooves
         Box(
             modifier = Modifier
                 .size(260.dp)
-                .rotate(currentRotation)
-                .shadow(elevation = 16.dp, shape = CircleShape)
+                .rotate(if (isPlaying) rotation else 0f)
                 .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFF22283A),
-                            VinylGrooveDark,
-                            Color(0xFF090B10)
-                        )
-                    )
-                )
-                .border(2.dp, SurfaceHighlight, CircleShape),
+                .background(Color(0xFF0F1117))
+                .border(2.dp, NeonViolet.copy(alpha = 0.5f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            // Vinyl grooves rings
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val center = Offset(size.width / 2f, size.height / 2f)
-                val radii = listOf(40f, 60f, 75f, 90f, 105f, 115f)
-                radii.forEach { r ->
+                val center = Offset(size.width / 2, size.height / 2)
+                val maxRadius = size.width / 2
+
+                // Concentric Grooves
+                val grooveColor = Color(0xFF1E2230)
+                for (r in (maxRadius * 0.45f).toInt()..(maxRadius * 0.95f).toInt() step 12) {
                     drawCircle(
-                        color = Color.White.copy(alpha = 0.05f),
-                        radius = (size.width / 2f) * (r / 130f),
+                        color = grooveColor,
+                        radius = r.toFloat(),
                         center = center,
-                        style = Stroke(width = 1.5f)
+                        style = Stroke(width = 1f)
                     )
                 }
 
-                // Vinyl shine reflection sheen
+                // Vinyl Sheen Gradients
                 drawCircle(
                     brush = Brush.sweepGradient(
-                        colors = listOf(
+                        listOf(
                             Color.Transparent,
-                            Color.White.copy(alpha = 0.12f),
+                            Color.White.copy(alpha = 0.08f),
                             Color.Transparent,
                             Color.White.copy(alpha = 0.08f),
                             Color.Transparent
-                        )
+                        ),
+                        center = center
                     ),
-                    center = center,
-                    radius = size.width / 2f
+                    radius = maxRadius,
+                    center = center
                 )
             }
 
-            // Center Album Art Label
+            // Center Album Art Sticker
             Box(
                 modifier = Modifier
-                    .size(96.dp)
+                    .size(105.dp)
                     .clip(CircleShape)
-                    .border(3.dp, NeonViolet, CircleShape)
-                    .background(SurfaceHighlight),
+                    .border(2.dp, NeonCyan, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 if (song?.albumArtRes != null) {
                     Image(
                         painter = painterResource(id = song.albumArtRes),
-                        contentDescription = "Cover Art",
+                        contentDescription = song.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else if (song?.albumArtUri != null) {
                     AsyncImage(
                         model = song.albumArtUri,
-                        contentDescription = "Cover Art",
+                        contentDescription = song.title,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
                     )
                 } else {
-                    Icon(
-                        imageVector = Icons.Default.MusicNote,
-                        contentDescription = null,
-                        tint = NeonCyan,
-                        modifier = Modifier.size(36.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Brush.linearGradient(listOf(NeonViolet, NeonCyan))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.album_art_neon),
+                            contentDescription = "Default Art",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
 
-                // Spindle Hole
+                // Center Spindle Hole
                 Box(
                     modifier = Modifier
-                        .size(14.dp)
+                        .size(20.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF090B10))
-                        .border(2.dp, VinylCenterGold, CircleShape)
+                        .background(Color(0xFF090C15))
+                        .border(1.5.dp, Color.White.copy(alpha = 0.7f), CircleShape)
                 )
             }
         }
 
-        // Tonearm pivot base (top right)
+        // Tonearm
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .offset(x = (-4).dp, y = (-4).dp)
+                .offset(x = 10.dp, y = (-10).dp)
+                .size(width = 80.dp, height = 140.dp)
+                .rotate(tonearmAngle)
         ) {
-            // Tonearm arm swinging
-            Box(
-                modifier = Modifier
-                    .rotate(tonearmAngle)
-                    .offset(x = (-16).dp, y = 20.dp)
-            ) {
-                Canvas(modifier = Modifier.size(width = 70.dp, height = 130.dp)) {
-                    // Arm rod
-                    drawLine(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(Color(0xFFCBD5E1), Color(0xFF64748B), Color(0xFF334155))
-                        ),
-                        start = Offset(60f, 0f),
-                        end = Offset(15f, 110f),
-                        strokeWidth = 6f
-                    )
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val pivot = Offset(size.width - 20f, 20f)
+                val cartridge = Offset(15f, size.height - 25f)
 
-                    // Head cartridge
-                    drawRoundRect(
-                        color = NeonViolet,
-                        topLeft = Offset(5f, 105f),
-                        size = androidx.compose.ui.geometry.Size(22f, 18f),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(4f, 4f)
-                    )
+                // Pivot Base
+                drawCircle(color = Color(0xFF64748B), radius = 18f, center = pivot)
+                drawCircle(color = NeonCyan, radius = 8f, center = pivot)
 
-                    // Needle tip
-                    drawLine(
-                        color = Color.White,
-                        start = Offset(10f, 123f),
-                        end = Offset(10f, 130f),
-                        strokeWidth = 3f
-                    )
-                }
+                // Arm
+                drawLine(
+                    color = Color(0xFFCBD5E1),
+                    start = pivot,
+                    end = cartridge,
+                    strokeWidth = 6f
+                )
+
+                // Cartridge / Needle head
+                drawCircle(color = NeonViolet, radius = 9f, center = cartridge)
             }
-
-            // Pivot Mount base
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .shadow(4.dp, CircleShape)
-                    .clip(CircleShape)
-                    .background(Color(0xFF334155))
-                    .border(2.dp, Color(0xFF94A3B8), CircleShape)
-            )
         }
     }
 }
