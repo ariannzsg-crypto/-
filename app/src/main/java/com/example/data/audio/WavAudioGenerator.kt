@@ -16,25 +16,26 @@ object WavAudioGenerator {
     private const val DURATION_SECONDS = 15
 
     fun getOrGenerateDemoSongs(context: Context): List<Song> {
-        val tracksDir = File(context.filesDir, "demo_tracks")
-        if (!tracksDir.exists()) tracksDir.mkdirs()
+        return try {
+            val tracksDir = File(context.filesDir, "demo_tracks")
+            if (!tracksDir.exists()) tracksDir.mkdirs()
 
-        val track1File = File(tracksDir, "neon_horizon.wav")
-        if (!track1File.exists() || track1File.length() == 0L) {
-            generateSynthwaveTrack(track1File)
-        }
+            val track1File = File(tracksDir, "neon_horizon.wav")
+            if (!track1File.exists() || track1File.length() == 0L) {
+                generateSynthwaveTrack(track1File)
+            }
 
-        val track2File = File(tracksDir, "ava_shoushtari.wav")
-        if (!track2File.exists() || track2File.length() == 0L) {
-            generatePersianTarTrack(track2File)
-        }
+            val track2File = File(tracksDir, "ava_shoushtari.wav")
+            if (!track2File.exists() || track2File.length() == 0L) {
+                generatePersianTarTrack(track2File)
+            }
 
-        val track3File = File(tracksDir, "midnight_lofi.wav")
-        if (!track3File.exists() || track3File.length() == 0L) {
-            generateLofiTrack(track3File)
-        }
+            val track3File = File(tracksDir, "midnight_lofi.wav")
+            if (!track3File.exists() || track3File.length() == 0L) {
+                generateLofiTrack(track3File)
+            }
 
-        return listOf(
+            listOf(
             Song(
                 id = "demo_neon_horizon",
                 title = "Neon Horizon",
@@ -91,7 +92,10 @@ object WavAudioGenerator {
                 isFavorite = false
             )
         )
+    } catch (e: Throwable) {
+        emptyList()
     }
+}
 
     private fun generateSynthwaveTrack(outputFile: File) {
         val totalSamples = SAMPLE_RATE * DURATION_SECONDS

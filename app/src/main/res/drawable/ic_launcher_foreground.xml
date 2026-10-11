@@ -1,21 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Headphones & Music Wave Glow -->
-    <path
-        android:fillColor="#A855F7"
-        android:pathData="M38,52c-4.4,0 -8,3.6 -8,8v12c0,4.4 3.6,8 8,8h2c1.1,0 2,-0.9 2,-2V54c0,-1.1 -0.9,-2 -2,-2h-2z" />
-    <path
-        android:fillColor="#A855F7"
-        android:pathData="M70,52h-2c-1.1,0 -2,0.9 -2,2v24c0,1.1 0.9,2 2,2h2c4.4,0 8,-3.6 8,-8V60c0,-4.4 -3.6,-8 -8,-8z" />
-    <path
-        android:fillColor="#06B6D4"
-        android:pathData="M54,28c-14.3,0 -26,11.7 -26,26v4h6v-4c0,-11 9,-20 20,-20s20,9 20,20v4h6v-4c0,-14.3 -11.7,-26 -26,-26z" />
-    <!-- Center Sound Waves -->
-    <path
-        android:fillColor="#EC4899"
-        android:pathData="M49,58h2v12h-2z M53,52h2v24h-2z M57,56h2v16h-2z M45,62h2v4h-2z M61,62h2v4h-2z" />
-</vector>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="66dp"
+        android:height="66dp"
+        android:gravity="center"
+        android:drawable="@drawable/ic_launcher_foreground_img" />
+</layer-list>

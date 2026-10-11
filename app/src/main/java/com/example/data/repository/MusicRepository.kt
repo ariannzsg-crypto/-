@@ -37,36 +37,46 @@ class MusicRepository(private val context: Context) {
 
     init {
         scope.launch {
-            // First ensure demo songs exist so user has immediate playable audio
-            val demoSongs = WavAudioGenerator.getOrGenerateDemoSongs(context)
-            dbHelper.upsertSongs(demoSongs)
+            try {
+                // First ensure demo songs exist so user has immediate playable audio
+                val demoSongs = WavAudioGenerator.getOrGenerateDemoSongs(context)
+                if (demoSongs.isNotEmpty()) {
+                    dbHelper.upsertSongs(demoSongs)
+                }
 
-            // Auto-scan device MediaStore & folders
-            scanDevice()
+                // Auto-scan device MediaStore & folders if permission granted
+                scanDevice()
+            } catch (e: Throwable) {
+                // Non-fatal fallback
+            }
         }
     }
 
     suspend fun scanDevice(): Int = withContext(Dispatchers.IO) {
-        val mediaStoreSongs = AudioScanner.scanMediaStore(context)
-        val folderSongs = AudioScanner.scanDeviceFolders(context)
+        try {
+            val mediaStoreSongs = AudioScanner.scanMediaStore(context)
+            val folderSongs = AudioScanner.scanDeviceFolders(context)
 
-        // Merge songs uniquely by URI / filePath
-        val mergedMap = mutableMapOf<String, Song>()
-        for (song in mediaStoreSongs) {
-            mergedMap[song.filePath ?: song.id] = song
-        }
-        for (song in folderSongs) {
-            val key = song.filePath ?: song.id
-            if (!mergedMap.containsKey(key)) {
-                mergedMap[key] = song
+            // Merge songs uniquely by URI / filePath
+            val mergedMap = mutableMapOf<String, Song>()
+            for (song in mediaStoreSongs) {
+                mergedMap[song.filePath ?: song.id] = song
             }
-        }
+            for (song in folderSongs) {
+                val key = song.filePath ?: song.id
+                if (!mergedMap.containsKey(key)) {
+                    mergedMap[key] = song
+                }
+            }
 
-        val allScanned = mergedMap.values.toList()
-        if (allScanned.isNotEmpty()) {
-            dbHelper.upsertSongs(allScanned)
+            val allScanned = mergedMap.values.toList()
+            if (allScanned.isNotEmpty()) {
+                dbHelper.upsertSongs(allScanned)
+            }
+            allScanned.size
+        } catch (e: Throwable) {
+            0
         }
-        allScanned.size
     }
 
     suspend fun importFromFolder(treeUri: Uri): Int = withContext(Dispatchers.IO) {

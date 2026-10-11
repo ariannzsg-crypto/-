@@ -168,7 +168,11 @@ fun MainAppScreen(viewModel: MusicViewModel) {
         }
 
         if (!hasPermission) {
-            permissionLauncher.launch(permissionsToRequest)
+            try {
+                permissionLauncher.launch(permissionsToRequest)
+            } catch (e: Throwable) {
+                // Ignore launcher exceptions
+            }
         }
     }
 

@@ -37,7 +37,7 @@ fun AudioVisualizer(
     val transition = rememberInfiniteTransition(label = "vis_trans")
     val phase by transition.animateFloat(
         initialValue = 0f,
-        targetValue = if (isPlaying) 2 * PI.toFloat() else 0f,
+        targetValue = 2 * PI.toFloat(),
         animationSpec = infiniteRepeatable(
             animation = tween(2400, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
