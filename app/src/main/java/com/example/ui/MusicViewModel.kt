@@ -72,6 +72,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _showSleepTimerDialog = MutableStateFlow(false)
     val showSleepTimerDialog: StateFlow<Boolean> = _showSleepTimerDialog.asStateFlow()
 
+    // AI Lyrics Transcriber State
+    private val _aiTranscribingSong = MutableStateFlow<Song?>(null)
+    val aiTranscribingSong: StateFlow<Song?> = _aiTranscribingSong.asStateFlow()
+
+    private val _isAiTranscribing = MutableStateFlow(false)
+    val isAiTranscribing: StateFlow<Boolean> = _isAiTranscribing.asStateFlow()
+
+    private val _aiLyricsResult = MutableStateFlow<com.example.data.ai.AiLyricsResult?>(null)
+    val aiLyricsResult: StateFlow<com.example.data.ai.AiLyricsResult?> = _aiLyricsResult.asStateFlow()
+
     init {
         playerManager.onSongFinished = { song ->
             repository.incrementPlayCount(song.id)
@@ -234,6 +244,34 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setVirtualizer(strength: Int) {
         playerManager.setVirtualizer(strength)
+    }
+
+    // AI Lyrics Transcriber
+    fun openAiTranscribeDialog(song: Song) {
+        _aiTranscribingSong.value = song
+        _aiLyricsResult.value = null
+        startAiTranscribe(song, null)
+    }
+
+    fun startAiTranscribe(song: Song, customPrompt: String? = null) {
+        _aiTranscribingSong.value = song
+        _isAiTranscribing.value = true
+        viewModelScope.launch {
+            val res = com.example.data.ai.AiLyricsService.transcribeSong(getApplication(), song, customPrompt)
+            _aiLyricsResult.value = res.getOrNull()
+            _isAiTranscribing.value = false
+        }
+    }
+
+    fun saveAiLyricsToSong(songId: String, lrcContent: String) {
+        repository.updateLyrics(songId, lrcContent)
+        playerManager.updateCurrentSongLyrics(lrcContent)
+    }
+
+    fun closeAiTranscribeDialog() {
+        _aiTranscribingSong.value = null
+        _aiLyricsResult.value = null
+        _isAiTranscribing.value = false
     }
 
     override fun onCleared() {

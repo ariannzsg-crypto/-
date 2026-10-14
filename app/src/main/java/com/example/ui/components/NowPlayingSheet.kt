@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
@@ -102,6 +103,7 @@ fun NowPlayingSheet(
     onOpenSleepTimer: () -> Unit,
     onSaveLyrics: (String) -> Unit,
     onSelectQueueItem: (Song) -> Unit,
+    onAiTranscribeClick: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (song == null) return
@@ -152,12 +154,21 @@ fun NowPlayingSheet(
                     )
                 }
 
-                IconButton(onClick = onOpenSleepTimer) {
-                    Icon(
-                        imageVector = Icons.Default.Bedtime,
-                        contentDescription = "Sleep Timer",
-                        tint = if (sleepTimerRemainingSeconds != null) NeonCyan else TextPrimary
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { onAiTranscribeClick(song) }) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "AI Transcribe",
+                            tint = NeonViolet
+                        )
+                    }
+                    IconButton(onClick = onOpenSleepTimer) {
+                        Icon(
+                            imageVector = Icons.Default.Bedtime,
+                            contentDescription = "Sleep Timer",
+                            tint = if (sleepTimerRemainingSeconds != null) NeonCyan else TextPrimary
+                        )
+                    }
                 }
             }
 
@@ -293,6 +304,7 @@ fun NowPlayingSheet(
                                 currentPositionMs = currentPositionMs,
                                 onSeekTo = onSeekTo,
                                 onSaveLyrics = onSaveLyrics,
+                                onAiTranscribeClick = { onAiTranscribeClick(song) },
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

@@ -3,6 +3,7 @@ package com.example.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,11 +16,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material3.AlertDialog
@@ -27,6 +30,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -39,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +65,7 @@ fun LyricsView(
     currentPositionMs: Long,
     onSeekTo: (Long) -> Unit,
     onSaveLyrics: (String) -> Unit,
+    onAiTranscribeClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val parsedLyrics = remember(lrcContent) {
@@ -91,32 +97,91 @@ fun LyricsView(
                 verticalArrangement = Arrangement.Center,
                 modifier = Modifier.padding(24.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.MusicNote,
-                    contentDescription = "No Lyrics",
-                    tint = TextMuted,
-                    modifier = Modifier.size(64.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0x33A855F7)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "AI Transcribe",
+                        tint = NeonViolet,
+                        modifier = Modifier.size(38.dp)
+                    )
+                }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "متن ترانه برای این آهنگ ثبت نشده است",
-                    color = TextSecondary,
+                    color = TextPrimary,
                     fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "با هوش مصنوعی جمینای می‌توانید صوت آهنگ را آنالیز کرده و متن کامل و زمان‌بندی شده دریافت کنید.",
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Primary Action: AI Transcribe
                 Button(
-                    onClick = { showEditDialog = true },
+                    onClick = onAiTranscribeClick,
                     colors = ButtonDefaults.buttonColors(containerColor = NeonViolet),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .height(48.dp)
+                        .testTag("ai_transcribe_lyrics_button")
                 ) {
-                    Text("افزودن متن ترانه (LRC)")
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "AI",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "تبدیل به متن با هوش مصنوعی (AI)",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Secondary Action: Manual Edit
+                OutlinedButton(
+                    onClick = { showEditDialog = true },
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .height(44.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit",
+                        tint = NeonCyan,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "ورود دستی متن یا فایل LRC",
+                        color = TextSecondary,
+                        fontSize = 12.sp
+                    )
                 }
             }
         } else {
             LazyColumn(
                 state = listState,
-                contentPadding = PaddingValues(top = 120.dp, bottom = 180.dp),
+                contentPadding = PaddingValues(top = 100.dp, bottom = 180.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .fillMaxSize()
@@ -134,14 +199,14 @@ fun LyricsView(
                         label = "lyric_color"
                     )
 
-                    val fontSize = if (isActive) 21.sp else 16.sp
+                    val fontSize = if (isActive) 20.sp else 15.sp
                     val fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal
 
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onSeekTo(lyric.timestampMs) }
-                            .padding(horizontal = 24.dp, vertical = if (isActive) 14.dp else 8.dp)
+                            .padding(horizontal = 24.dp, vertical = if (isActive) 12.dp else 7.dp)
                             .then(
                                 if (isActive) {
                                     Modifier
@@ -164,19 +229,53 @@ fun LyricsView(
                 }
             }
 
-            // Top-right edit button to modify lyrics
-            IconButton(
-                onClick = { showEditDialog = true },
+            // Top control buttons (AI Transcribe & Manual Edit)
+            Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(16.dp)
-                    .background(Color(0x99131826), RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = "Edit Lyrics",
-                    tint = NeonPink
-                )
+                // AI Transcribe button
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xD9131826))
+                        .border(1.dp, NeonViolet.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .clickable(onClick = onAiTranscribeClick)
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = "AI Lyrics",
+                            tint = NeonViolet,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "هوش مصنوعی",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                // Edit Button
+                IconButton(
+                    onClick = { showEditDialog = true },
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(Color(0xD9131826), RoundedCornerShape(10.dp))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit Lyrics",
+                        tint = NeonPink,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
     }

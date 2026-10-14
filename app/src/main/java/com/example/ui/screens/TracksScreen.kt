@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -85,6 +86,7 @@ fun TracksScreen(
     onAddToPlaylistClick: (Song) -> Unit,
     onScanStorageClick: () -> Unit,
     onPickFolderClick: () -> Unit,
+    onAiTranscribeClick: (Song) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -278,7 +280,8 @@ fun TracksScreen(
                         isPlaying = isCurrent && isPlaying,
                         onSongClick = { onSongClick(song) },
                         onFavoriteToggle = { onFavoriteToggle(song.id) },
-                        onAddToPlaylist = { onAddToPlaylistClick(song) }
+                        onAddToPlaylist = { onAddToPlaylistClick(song) },
+                        onAiTranscribe = { onAiTranscribeClick(song) }
                     )
                 }
                 item {
@@ -323,7 +326,8 @@ private fun SongListItem(
     isPlaying: Boolean,
     onSongClick: () -> Unit,
     onFavoriteToggle: () -> Unit,
-    onAddToPlaylist: () -> Unit
+    onAddToPlaylist: () -> Unit,
+    onAiTranscribe: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -460,6 +464,24 @@ private fun SongListItem(
                 expanded = showMenu,
                 onDismissRequest = { showMenu = false }
             ) {
+                DropdownMenuItem(
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = NeonViolet,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("تبدیل به متن با AI (ترانه)")
+                        }
+                    },
+                    onClick = {
+                        showMenu = false
+                        onAiTranscribe()
+                    }
+                )
                 DropdownMenuItem(
                     text = { Text("افزودن به پلی‌لیست") },
                     onClick = {

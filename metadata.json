@@ -1,6 +1,6 @@
 {
-  "name": "Ava Player",
-  "description": "موزیک پلیر پیشرفته و هوشمند با اسکن خودکار فایل‌ها، متن همگام‌سازی شده، اکولایزر و ویژوالایزر",
+  "name": "Ava AI Music Player",
+  "description": "Smart Android Music Player with AI Song-to-Lyrics Transcription, synchronized LRC lyrics, 5-band equalizer, audio visualizers, and local storage scanner",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

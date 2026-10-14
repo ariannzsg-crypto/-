@@ -1,14 +1,28 @@
 package com.example.data.audio
 
+import android.app.PendingIntent
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.MediaPlayer
+import android.content.Intent
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.Virtualizer
+import android.net.Uri
+import android.os.Build
 import android.util.Log
+import androidx.annotation.OptIn
+import androidx.core.content.ContextCompat
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
+import com.example.MainActivity
 import com.example.data.model.RepeatMode
 import com.example.data.model.Song
+import com.example.data.service.MusicPlaybackService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,11 +32,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.io.File
 
+@OptIn(UnstableApi::class)
 class MusicPlayerManager(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.Main + Job())
-    private var mediaPlayer: MediaPlayer? = null
+    private val player: ExoPlayer
+    private var mediaSession: MediaSession? = null
+
     private var progressJob: Job? = null
     private var sleepTimerJob: Job? = null
 
@@ -68,10 +86,10 @@ class MusicPlayerManager(private val context: Context) {
     private val _currentPreset = MutableStateFlow("Normal")
     val currentPreset: StateFlow<String> = _currentPreset.asStateFlow()
 
-    private val _bassBoostStrength = MutableStateFlow(500) // 0 - 1000
+    private val _bassBoostStrength = MutableStateFlow(500)
     val bassBoostStrength: StateFlow<Int> = _bassBoostStrength.asStateFlow()
 
-    private val _virtualizerStrength = MutableStateFlow(300) // 0 - 1000
+    private val _virtualizerStrength = MutableStateFlow(300)
     val virtualizerStrength: StateFlow<Int> = _virtualizerStrength.asStateFlow()
 
     private val _bandFrequencies = MutableStateFlow<List<Int>>(emptyList())
@@ -82,6 +100,93 @@ class MusicPlayerManager(private val context: Context) {
 
     var onSongFinished: ((Song) -> Unit)? = null
 
+    init {
+        val audioAttributes = AudioAttributes.Builder()
+            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+            .setUsage(C.USAGE_MEDIA)
+            .build()
+
+        player = ExoPlayer.Builder(context)
+            .setAudioAttributes(audioAttributes, true)
+            .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .build()
+
+        setupMediaSession()
+        setupPlayerListeners()
+    }
+
+    private fun setupMediaSession() {
+        try {
+            val sessionActivityIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                0,
+                sessionActivityIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            mediaSession = MediaSession.Builder(context, player)
+                .setSessionActivity(pendingIntent)
+                .build()
+        } catch (e: Throwable) {
+            Log.w("MusicPlayerManager", "MediaSession init skipped", e)
+        }
+    }
+
+    private fun setupPlayerListeners() {
+        player.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) {
+                _isPlaying.value = playing
+                if (playing) {
+                    startProgressTracker()
+                    startService()
+                } else {
+                    stopProgressTracker()
+                }
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                when (playbackState) {
+                    Player.STATE_READY -> {
+                        val dur = player.duration
+                        if (dur > 0) {
+                            _durationMs.value = dur
+                        }
+                        initAudioEffects(player.audioSessionId)
+                    }
+                    Player.STATE_ENDED -> {
+                        handleSongCompletion()
+                    }
+                    else -> {}
+                }
+            }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                _currentPositionMs.value = player.currentPosition.coerceAtLeast(0L)
+            }
+        })
+    }
+
+    private fun startService() {
+        try {
+            val intent = Intent(context, MusicPlaybackService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(context, intent)
+            } else {
+                context.startService(intent)
+            }
+        } catch (e: Throwable) {
+            Log.w("MusicPlayerManager", "Could not start MusicPlaybackService directly", e)
+        }
+    }
+
     fun setQueue(songs: List<Song>, startIndex: Int = 0, autoPlay: Boolean = false) {
         _queue.value = songs
         if (songs.isNotEmpty()) {
@@ -90,85 +195,71 @@ class MusicPlayerManager(private val context: Context) {
             _currentSong.value = song
             _durationMs.value = song.durationMs
             _currentPositionMs.value = 0L
+
             if (autoPlay) {
                 playSong(song, true)
             } else {
-                _isPlaying.value = false
+                // Prepare item in player without starting
+                loadSongIntoPlayer(song, playImmediately = false)
             }
         }
     }
 
     fun playSong(song: Song, startPlaying: Boolean = true) {
-        try {
-            mediaPlayer?.stop()
-            mediaPlayer?.release()
-        } catch (e: Throwable) { }
-        mediaPlayer = null
-
-        try {
-            equalizer?.release()
-            bassBoost?.release()
-            virtualizer?.release()
-        } catch (e: Throwable) { }
-        equalizer = null
-        bassBoost = null
-        virtualizer = null
-
         _currentSong.value = song
         _durationMs.value = song.durationMs
         _currentPositionMs.value = 0L
 
+        loadSongIntoPlayer(song, playImmediately = startPlaying)
+    }
+
+    private fun loadSongIntoPlayer(song: Song, playImmediately: Boolean) {
         try {
-            val player = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .build()
-                )
-                setDataSource(context, song.uri)
-                prepare()
-            }
-            mediaPlayer = player
-
-            try {
-                initAudioEffects(player.audioSessionId)
-            } catch (e: Throwable) {
-                Log.w("MusicPlayerManager", "Audio effects init skipped", e)
+            val mediaUri = if (song.filePath != null && File(song.filePath).exists()) {
+                Uri.fromFile(File(song.filePath))
+            } else {
+                song.uri
             }
 
-            player.setOnCompletionListener {
-                handleSongCompletion()
-            }
+            val metadata = MediaMetadata.Builder()
+                .setTitle(song.title)
+                .setArtist(song.artist)
+                .setAlbumTitle(song.album)
+                .setArtworkUri(song.albumArtUri)
+                .build()
 
-            player.setOnErrorListener { _, what, extra ->
-                Log.e("MusicPlayerManager", "MediaPlayer error: $what, $extra")
-                _isPlaying.value = false
-                stopProgressTracker()
-                true
-            }
+            val mediaItem = MediaItem.Builder()
+                .setMediaId(song.id)
+                .setUri(mediaUri)
+                .setMediaMetadata(metadata)
+                .build()
 
-            val realDuration = try { player.duration.toLong() } catch (e: Throwable) { song.durationMs }
-            if (realDuration > 0) {
-                _durationMs.value = realDuration
-            }
+            player.setMediaItem(mediaItem)
+            player.prepare()
 
-            if (startPlaying) {
-                player.start()
+            if (playImmediately) {
+                player.play()
                 _isPlaying.value = true
                 startProgressTracker()
+                startService()
             } else {
                 _isPlaying.value = false
             }
         } catch (e: Throwable) {
-            Log.e("MusicPlayerManager", "Failed to play song: ${song.title}", e)
+            Log.e("MusicPlayerManager", "Failed to load song in ExoPlayer: ${song.title}", e)
             _isPlaying.value = false
             stopProgressTracker()
         }
     }
 
     private fun initAudioEffects(audioSessionId: Int) {
-        if (audioSessionId == 0) return
+        if (audioSessionId == C.AUDIO_SESSION_ID_UNSET || audioSessionId == 0) return
+
+        try {
+            equalizer?.release()
+            bassBoost?.release()
+            virtualizer?.release()
+        } catch (e: Throwable) { }
 
         try {
             equalizer = Equalizer(0, audioSessionId).apply {
@@ -192,14 +283,18 @@ class MusicPlayerManager(private val context: Context) {
             val levels = mutableMapOf<Short, Short>()
             for (i in 0 until numBands) {
                 val band = i.toShort()
-                val centerFreq = try { equalizer?.getCenterFreq(band)?.div(1000) ?: ((i + 1) * 200) } catch (e: Throwable) { (i + 1) * 200 }
+                val centerFreq = try {
+                    equalizer?.getCenterFreq(band)?.div(1000) ?: ((i + 1) * 200)
+                } catch (e: Throwable) {
+                    (i + 1) * 200
+                }
                 freqs.add(centerFreq)
                 levels[band] = try { equalizer?.getBandLevel(band) ?: 0 } catch (e: Throwable) { 0 }
             }
             _bandFrequencies.value = freqs
             _bandLevels.value = levels
         } catch (e: Throwable) {
-            Log.w("MusicPlayerManager", "Equalizer unavailable", e)
+            Log.w("MusicPlayerManager", "Equalizer unavailable on this device", e)
         }
 
         try {
@@ -222,33 +317,27 @@ class MusicPlayerManager(private val context: Context) {
     }
 
     fun togglePlayPause() {
-        val player = mediaPlayer
-        if (player == null) {
+        if (player.isPlaying) {
+            player.pause()
+            _isPlaying.value = false
+            stopProgressTracker()
+        } else {
             val cur = _currentSong.value
             if (cur != null) {
-                playSong(cur, true)
+                if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+                    playSong(cur, true)
+                } else {
+                    player.play()
+                    _isPlaying.value = true
+                    startProgressTracker()
+                    startService()
+                }
             }
-            return
-        }
-        try {
-            if (player.isPlaying) {
-                player.pause()
-                _isPlaying.value = false
-                stopProgressTracker()
-            } else {
-                player.start()
-                _isPlaying.value = true
-                startProgressTracker()
-            }
-        } catch (e: Throwable) {
-            Log.e("MusicPlayerManager", "togglePlayPause failed", e)
-            val cur = _currentSong.value
-            if (cur != null) playSong(cur, true)
         }
     }
 
     fun seekTo(positionMs: Long) {
-        mediaPlayer?.seekTo(positionMs.toInt())
+        player.seekTo(positionMs)
         _currentPositionMs.value = positionMs
     }
 
@@ -268,7 +357,7 @@ class MusicPlayerManager(private val context: Context) {
         if (nextIndex != null) {
             playSong(q[nextIndex], true)
         } else {
-            mediaPlayer?.pause()
+            player.pause()
             _isPlaying.value = false
             _currentPositionMs.value = 0L
         }
@@ -301,18 +390,29 @@ class MusicPlayerManager(private val context: Context) {
         when (_repeatMode.value) {
             RepeatMode.ONE -> {
                 seekTo(0L)
-                mediaPlayer?.start()
-                _isPlaying.value = true
+                player.play()
             }
-            else -> playNext()
+            RepeatMode.ALL -> {
+                playNext()
+            }
+            RepeatMode.OFF -> {
+                val q = _queue.value
+                val curIndex = q.indexOfFirst { it.id == cur?.id }
+                if (curIndex in 0 until q.size - 1) {
+                    playNext()
+                } else {
+                    _isPlaying.value = false
+                    stopProgressTracker()
+                }
+            }
         }
     }
 
     fun toggleRepeatMode() {
         _repeatMode.value = when (_repeatMode.value) {
-            RepeatMode.OFF -> RepeatMode.ALL
             RepeatMode.ALL -> RepeatMode.ONE
             RepeatMode.ONE -> RepeatMode.OFF
+            RepeatMode.OFF -> RepeatMode.ALL
         }
     }
 
@@ -321,31 +421,39 @@ class MusicPlayerManager(private val context: Context) {
     }
 
     fun setSleepTimer(minutes: Int?) {
-        _sleepTimerMinutes.value = minutes
-        sleepTimerJob?.cancel()
-
         if (minutes == null || minutes <= 0) {
-            _sleepTimerRemainingSeconds.value = null
-            return
+            cancelSleepTimer()
+        } else {
+            startSleepTimer(minutes)
         }
+    }
 
-        var totalSeconds = minutes * 60
-        _sleepTimerRemainingSeconds.value = totalSeconds
+    fun startSleepTimer(minutes: Int) {
+        _sleepTimerMinutes.value = minutes
+        _sleepTimerRemainingSeconds.value = minutes * 60
 
+        sleepTimerJob?.cancel()
         sleepTimerJob = scope.launch {
-            while (totalSeconds > 0 && isActive) {
+            var remaining = minutes * 60
+            while (remaining > 0 && isActive) {
                 delay(1000L)
-                totalSeconds--
-                _sleepTimerRemainingSeconds.value = totalSeconds
+                remaining--
+                _sleepTimerRemainingSeconds.value = remaining
             }
             if (isActive) {
-                // Pause playback when timer completes
-                mediaPlayer?.pause()
+                player.pause()
                 _isPlaying.value = false
+                stopProgressTracker()
                 _sleepTimerMinutes.value = null
                 _sleepTimerRemainingSeconds.value = null
             }
         }
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        _sleepTimerMinutes.value = null
+        _sleepTimerRemainingSeconds.value = null
     }
 
     fun setEqualizerPreset(presetName: String) {
@@ -355,7 +463,6 @@ class MusicPlayerManager(private val context: Context) {
             val idx = presets.indexOf(presetName)
             if (idx >= 0) {
                 equalizer?.usePreset(idx.toShort())
-                // update band levels
                 val levels = mutableMapOf<Short, Short>()
                 val bands = equalizer?.numberOfBands ?: 0
                 for (b in 0 until bands) {
@@ -364,7 +471,7 @@ class MusicPlayerManager(private val context: Context) {
                 }
                 _bandLevels.value = levels
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.w("MusicPlayerManager", "Failed to apply preset $presetName", e)
         }
     }
@@ -375,7 +482,7 @@ class MusicPlayerManager(private val context: Context) {
             val updated = _bandLevels.value.toMutableMap()
             updated[band] = level
             _bandLevels.value = updated
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.w("MusicPlayerManager", "Failed to set band level", e)
         }
     }
@@ -384,7 +491,7 @@ class MusicPlayerManager(private val context: Context) {
         _bassBoostStrength.value = strength
         try {
             bassBoost?.setStrength(strength.toShort())
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.w("MusicPlayerManager", "Failed to set bass boost", e)
         }
     }
@@ -393,7 +500,7 @@ class MusicPlayerManager(private val context: Context) {
         _virtualizerStrength.value = strength
         try {
             virtualizer?.setStrength(strength.toShort())
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.w("MusicPlayerManager", "Failed to set virtualizer", e)
         }
     }
@@ -401,8 +508,8 @@ class MusicPlayerManager(private val context: Context) {
     private fun startProgressTracker() {
         progressJob?.cancel()
         progressJob = scope.launch {
-            while (isActive && mediaPlayer?.isPlaying == true) {
-                _currentPositionMs.value = mediaPlayer?.currentPosition?.toLong() ?: 0L
+            while (isActive && player.isPlaying) {
+                _currentPositionMs.value = player.currentPosition.coerceAtLeast(0L)
                 delay(100L) // Smooth 100ms updates for precise lyrics sync
             }
         }
@@ -412,15 +519,23 @@ class MusicPlayerManager(private val context: Context) {
         progressJob?.cancel()
     }
 
+    fun updateCurrentSongLyrics(lrcContent: String) {
+        val cur = _currentSong.value ?: return
+        val updated = cur.copy(lrcContent = lrcContent)
+        _currentSong.value = updated
+        _queue.value = _queue.value.map { if (it.id == cur.id) updated else it }
+    }
+
     fun release() {
         stopProgressTracker()
         sleepTimerJob?.cancel()
         try {
-            mediaPlayer?.release()
+            player.release()
+            mediaSession?.release()
             equalizer?.release()
             bassBoost?.release()
             virtualizer?.release()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e("MusicPlayerManager", "Error in release", e)
         }
     }
