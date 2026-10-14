@@ -1,10 +1,20 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,12 +62,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.R
@@ -108,8 +123,20 @@ fun NowPlayingSheet(
 ) {
     if (song == null) return
 
+    val haptic = LocalHapticFeedback.current
     var currentTab by remember { mutableStateOf(NowPlayingTab.TURNTABLE) }
     var visualizerStyle by remember { mutableStateOf(VisualizerStyle.SPECTRUM_BARS) }
+
+    // Apple Music style interactive horizontal swipe gesture
+    var swipeOffset by remember { mutableStateOf(0f) }
+    val animatedSwipeOffset by animateFloatAsState(
+        targetValue = swipeOffset,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "apple_music_swipe"
+    )
 
     Box(
         modifier = modifier
@@ -117,6 +144,21 @@ fun NowPlayingSheet(
             .background(MidnightBackground)
             .testTag("now_playing_sheet")
     ) {
+        // Apple Music style Ambient Glowing Aura
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            NeonViolet.copy(alpha = 0.22f),
+                            NeonCyan.copy(alpha = 0.12f),
+                            Color.Transparent
+                        ),
+                        radius = 1200f
+                    )
+                )
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -207,18 +249,87 @@ fun NowPlayingSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Main Display Area based on selected Tab
+            // Main Display Area based on selected Tab with Apple Music swipe to change song
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .offset { IntOffset(animatedSwipeOffset.roundToInt(), 0) }
+                    .then(
+                        if (currentTab == NowPlayingTab.TURNTABLE || currentTab == NowPlayingTab.VISUALIZER) {
+                            Modifier.pointerInput(Unit) {
+                                detectHorizontalDragGestures(
+                                    onDragEnd = {
+                                        if (swipeOffset < -130f) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onNextClick()
+                                        } else if (swipeOffset > 130f) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onPreviousClick()
+                                        }
+                                        swipeOffset = 0f
+                                    },
+                                    onDragCancel = {
+                                        swipeOffset = 0f
+                                    },
+                                    onHorizontalDrag = { change, dragAmount ->
+                                        change.consume()
+                                        swipeOffset = (swipeOffset + dragAmount).coerceIn(-300f, 300f)
+                                    }
+                                )
+                            }
+                        } else Modifier
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                AnimatedContent(targetState = currentTab, label = "tab_anim") { tab ->
-                    when (tab) {
+                // Apple Music Swipe Direction Indicators
+                if (swipeOffset < -60f) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 8.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xE606B6D4))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("آهنگ بعدی", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(Icons.Default.SkipNext, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                    }
+                } else if (swipeOffset > 60f) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .padding(start = 8.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xE6A855F7))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.SkipPrevious, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("آهنگ قبلی", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                AnimatedContent(
+                    targetState = song,
+                    transitionSpec = {
+                        if (swipeOffset <= 0) {
+                            (slideInHorizontally { width -> width / 2 } + fadeIn())
+                                .togetherWith(slideOutHorizontally { width -> -width / 2 } + fadeOut())
+                        } else {
+                            (slideInHorizontally { width -> -width / 2 } + fadeIn())
+                                .togetherWith(slideOutHorizontally { width -> width / 2 } + fadeOut())
+                        }
+                    },
+                    label = "apple_music_song_change"
+                ) { currentSongState ->
+                    when (currentTab) {
                         NowPlayingTab.TURNTABLE -> {
                             VinylTurntable(
-                                song = song,
+                                song = currentSongState,
                                 isPlaying = isPlaying,
                                 modifier = Modifier.size(280.dp)
                             )
@@ -361,30 +472,40 @@ fun NowPlayingSheet(
                 }
             }
 
-            // Track Details & Actions Row
+            // Track Details & Actions Row with Apple Music smooth text transitions
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = song.title,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = song.artist,
-                        color = TextSecondary,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                AnimatedContent(
+                    targetState = song,
+                    transitionSpec = {
+                        (slideInHorizontally { width -> width / 3 } + fadeIn())
+                            .togetherWith(slideOutHorizontally { width -> -width / 3 } + fadeOut())
+                    },
+                    modifier = Modifier.weight(1f),
+                    label = "apple_music_title_anim"
+                ) { curSong ->
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = curSong.title,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = curSong.artist,
+                            color = TextSecondary,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
 
                 IconButton(onClick = onFavoriteToggle) {
@@ -426,7 +547,7 @@ fun NowPlayingSheet(
                     .testTag("track_slider")
             )
 
-            // Timestamps
+            // Timestamps (Apple Music format: elapsed / -remaining)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -437,7 +558,7 @@ fun NowPlayingSheet(
                     fontSize = 12.sp
                 )
                 Text(
-                    text = formatMs(durationMs),
+                    text = formatRemainingMs(currentPositionMs, durationMs),
                     color = TextSecondary,
                     fontSize = 12.sp
                 )
@@ -513,6 +634,68 @@ fun NowPlayingSheet(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Apple Music Style Bottom Quick-Access Bar (Lyrics, Visualizer, Queue)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Lyrics Toggle (Apple Music Speech Bubble / Subtitles icon)
+                IconButton(
+                    onClick = {
+                        currentTab = if (currentTab == NowPlayingTab.LYRICS) NowPlayingTab.TURNTABLE else NowPlayingTab.LYRICS
+                    },
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(if (currentTab == NowPlayingTab.LYRICS) Color(0x33A855F7) else Color.Transparent)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Subtitles,
+                        contentDescription = "Lyrics",
+                        tint = if (currentTab == NowPlayingTab.LYRICS) NeonViolet else TextMuted,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                // Visualizer Toggle
+                IconButton(
+                    onClick = {
+                        currentTab = if (currentTab == NowPlayingTab.VISUALIZER) NowPlayingTab.TURNTABLE else NowPlayingTab.VISUALIZER
+                    },
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(if (currentTab == NowPlayingTab.VISUALIZER) Color(0x3306B6D4) else Color.Transparent)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.GraphicEq,
+                        contentDescription = "Visualizer",
+                        tint = if (currentTab == NowPlayingTab.VISUALIZER) NeonCyan else TextMuted,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                // Up Next Queue Toggle
+                IconButton(
+                    onClick = {
+                        currentTab = if (currentTab == NowPlayingTab.QUEUE) NowPlayingTab.TURNTABLE else NowPlayingTab.QUEUE
+                    },
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(if (currentTab == NowPlayingTab.QUEUE) Color(0x33EC4899) else Color.Transparent)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.QueueMusic,
+                        contentDescription = "Up Next Queue",
+                        tint = if (currentTab == NowPlayingTab.QUEUE) NeonPink else TextMuted,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -541,8 +724,17 @@ private fun TabPill(
 }
 
 private fun formatMs(ms: Long): String {
-    val totalSec = ms / 1000
+    val totalSec = (ms / 1000).coerceAtLeast(0L)
     val min = totalSec / 60
     val sec = totalSec % 60
     return "%02d:%02d".format(min, sec)
+}
+
+private fun formatRemainingMs(currentMs: Long, durationMs: Long): String {
+    if (durationMs <= 0) return "-00:00"
+    val remaining = (durationMs - currentMs).coerceAtLeast(0L)
+    val totalSec = remaining / 1000
+    val min = totalSec / 60
+    val sec = totalSec % 60
+    return "-%02d:%02d".format(min, sec)
 }

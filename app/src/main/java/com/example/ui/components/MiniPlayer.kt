@@ -1,20 +1,29 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,18 +50,26 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.R
@@ -105,13 +122,46 @@ fun MiniPlayer(
             listOf(NeonViolet, NeonPink, NeonCyan)
         )
 
+        val haptic = LocalHapticFeedback.current
+        var miniDragX by remember { mutableStateOf(0f) }
+        val animatedMiniDragX by animateFloatAsState(
+            targetValue = miniDragX,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessLow
+            ),
+            label = "mini_drag_spring"
+        )
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 6.dp)
+                .offset { IntOffset(animatedMiniDragX.roundToInt(), 0) }
                 .clip(cardShape)
                 .background(Color(0xE6131826))
                 .border(1.5.dp, borderGradient, cardShape)
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            if (miniDragX < -90f) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onNextClick()
+                            } else if (miniDragX > 90f) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onPreviousClick()
+                            }
+                            miniDragX = 0f
+                        },
+                        onDragCancel = {
+                            miniDragX = 0f
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            miniDragX = (miniDragX + dragAmount).coerceIn(-240f, 240f)
+                        }
+                    )
+                }
                 .clickable { onClick() }
                 .testTag("mini_player")
         ) {
@@ -167,41 +217,49 @@ fun MiniPlayer(
 
                     Spacer(modifier = Modifier.width(12.dp))
 
-                    // Title & Artist info
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = song.title,
-                            color = TextPrimary,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Title & Artist info with Apple Music style animated crossfade
+                    AnimatedContent(
+                        targetState = song,
+                        transitionSpec = {
+                            (slideInHorizontally { width -> width / 3 } + fadeIn())
+                                .togetherWith(slideOutHorizontally { width -> -width / 3 } + fadeOut())
+                        },
+                        modifier = Modifier.weight(1f),
+                        label = "mini_title_anim"
+                    ) { curSong ->
+                        Column(modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                text = song.artist,
-                                color = TextSecondary,
-                                fontSize = 12.sp,
+                                text = curSong.title,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            if (song.lrcContent != null) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .background(NeonPink.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                                        .border(0.5.dp, NeonPink, RoundedCornerShape(4.dp))
-                                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                                ) {
-                                    Text(
-                                        text = "LRC",
-                                        color = NeonPink,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = curSong.artist,
+                                    color = TextSecondary,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (curSong.lrcContent != null) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .background(NeonPink.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                            .border(0.5.dp, NeonPink, RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    ) {
+                                        Text(
+                                            text = "LRC",
+                                            color = NeonPink,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
                             }
                         }

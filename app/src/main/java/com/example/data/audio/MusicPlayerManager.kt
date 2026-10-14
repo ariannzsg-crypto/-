@@ -1,6 +1,5 @@
 package com.example.data.audio
 
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.media.audiofx.BassBoost
@@ -11,7 +10,6 @@ import android.os.Build
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
-import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -19,7 +17,6 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
-import com.example.MainActivity
 import com.example.data.model.RepeatMode
 import com.example.data.model.Song
 import com.example.data.service.MusicPlaybackService
@@ -38,8 +35,8 @@ import java.io.File
 class MusicPlayerManager(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.Main + Job())
-    private val player: ExoPlayer
-    private var mediaSession: MediaSession? = null
+    private val player: ExoPlayer = PlayerHolder.getPlayer(context)
+    private val mediaSession: MediaSession = PlayerHolder.getMediaSession(context)
 
     private var progressJob: Job? = null
     private var sleepTimerJob: Job? = null
@@ -101,39 +98,7 @@ class MusicPlayerManager(private val context: Context) {
     var onSongFinished: ((Song) -> Unit)? = null
 
     init {
-        val audioAttributes = AudioAttributes.Builder()
-            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-            .setUsage(C.USAGE_MEDIA)
-            .build()
-
-        player = ExoPlayer.Builder(context)
-            .setAudioAttributes(audioAttributes, true)
-            .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(C.WAKE_MODE_LOCAL)
-            .build()
-
-        setupMediaSession()
         setupPlayerListeners()
-    }
-
-    private fun setupMediaSession() {
-        try {
-            val sessionActivityIntent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                context,
-                0,
-                sessionActivityIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-
-            mediaSession = MediaSession.Builder(context, player)
-                .setSessionActivity(pendingIntent)
-                .build()
-        } catch (e: Throwable) {
-            Log.w("MusicPlayerManager", "MediaSession init skipped", e)
-        }
     }
 
     private fun setupPlayerListeners() {
@@ -196,12 +161,7 @@ class MusicPlayerManager(private val context: Context) {
             _durationMs.value = song.durationMs
             _currentPositionMs.value = 0L
 
-            if (autoPlay) {
-                playSong(song, true)
-            } else {
-                // Prepare item in player without starting
-                loadSongIntoPlayer(song, playImmediately = false)
-            }
+            loadSongIntoPlayer(song, playImmediately = autoPlay)
         }
     }
 
@@ -215,10 +175,10 @@ class MusicPlayerManager(private val context: Context) {
 
     private fun loadSongIntoPlayer(song: Song, playImmediately: Boolean) {
         try {
-            val mediaUri = if (song.filePath != null && File(song.filePath).exists()) {
-                Uri.fromFile(File(song.filePath))
-            } else {
-                song.uri
+            val mediaUri = when {
+                song.uri.scheme == "android.resource" -> song.uri
+                song.filePath != null && File(song.filePath).exists() -> Uri.fromFile(File(song.filePath))
+                else -> song.uri
             }
 
             val metadata = MediaMetadata.Builder()
@@ -368,7 +328,6 @@ class MusicPlayerManager(private val context: Context) {
         val cur = _currentSong.value ?: return
         if (q.isEmpty()) return
 
-        // If played more than 3 seconds, restart current song
         if (_currentPositionMs.value > 3000L) {
             seekTo(0L)
             return
@@ -510,7 +469,7 @@ class MusicPlayerManager(private val context: Context) {
         progressJob = scope.launch {
             while (isActive && player.isPlaying) {
                 _currentPositionMs.value = player.currentPosition.coerceAtLeast(0L)
-                delay(100L) // Smooth 100ms updates for precise lyrics sync
+                delay(100L)
             }
         }
     }
@@ -530,8 +489,6 @@ class MusicPlayerManager(private val context: Context) {
         stopProgressTracker()
         sleepTimerJob?.cancel()
         try {
-            player.release()
-            mediaSession?.release()
             equalizer?.release()
             bassBoost?.release()
             virtualizer?.release()

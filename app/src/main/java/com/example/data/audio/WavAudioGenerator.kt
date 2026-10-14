@@ -35,6 +35,11 @@ object WavAudioGenerator {
                 generateLofiTrack(track3File)
             }
 
+            val pkg = context.packageName
+            val rawUri1 = android.net.Uri.parse("android.resource://$pkg/${R.raw.track_neon}")
+            val rawUri2 = android.net.Uri.parse("android.resource://$pkg/${R.raw.track_persian}")
+            val rawUri3 = android.net.Uri.parse("android.resource://$pkg/${R.raw.track_lofi}")
+
             listOf(
             Song(
                 id = "demo_neon_horizon",
@@ -42,7 +47,7 @@ object WavAudioGenerator {
                 artist = "Cyber Pulse",
                 album = "Retrowave 2077",
                 durationMs = DURATION_SECONDS * 1000L,
-                uri = android.net.Uri.fromFile(track1File),
+                uri = rawUri1,
                 albumArtRes = R.drawable.album_art_neon,
                 filePath = track1File.absolutePath,
                 lrcContent = """
@@ -61,7 +66,7 @@ object WavAudioGenerator {
                 artist = "استاد تار و سه تار",
                 album = "آواز کهن ایران",
                 durationMs = DURATION_SECONDS * 1000L,
-                uri = android.net.Uri.fromFile(track2File),
+                uri = rawUri2,
                 albumArtRes = R.drawable.album_art_persian,
                 filePath = track2File.absolutePath,
                 lrcContent = """
@@ -79,7 +84,7 @@ object WavAudioGenerator {
                 artist = "Lofi Study Beats",
                 album = "Rainy Window EP",
                 durationMs = DURATION_SECONDS * 1000L,
-                uri = android.net.Uri.fromFile(track3File),
+                uri = rawUri3,
                 albumArtRes = R.drawable.album_art_chill,
                 filePath = track3File.absolutePath,
                 lrcContent = """

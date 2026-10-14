@@ -32,7 +32,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.GraphicEq
@@ -127,6 +126,8 @@ fun MainAppScreen(viewModel: MusicViewModel) {
     val showCreatePlaylist by viewModel.showCreatePlaylistDialog.collectAsState()
     val songForAddToPlaylist by viewModel.songForAddToPlaylist.collectAsState()
     val showSleepTimer by viewModel.showSleepTimerDialog.collectAsState()
+
+    // AI Transcribe state
     val aiTranscribingSong by viewModel.aiTranscribingSong.collectAsState()
     val isAiTranscribing by viewModel.isAiTranscribing.collectAsState()
     val aiLyricsResult by viewModel.aiLyricsResult.collectAsState()
@@ -194,11 +195,7 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                 isScanning = isScanning,
                 sleepTimerSec = sleepTimerSec,
                 onScanClick = { viewModel.scanStorage() },
-                onSleepTimerClick = { viewModel.openSleepTimerDialog() },
-                onAiLyricsClick = {
-                    currentSong?.let { viewModel.openAiTranscribeDialog(it) }
-                        ?: songs.firstOrNull()?.let { viewModel.openAiTranscribeDialog(it) }
-                }
+                onSleepTimerClick = { viewModel.openSleepTimerDialog() }
             )
         },
         bottomBar = {
@@ -418,8 +415,12 @@ fun MainAppScreen(viewModel: MusicViewModel) {
             isLoading = isAiTranscribing,
             result = aiLyricsResult,
             onDismiss = { viewModel.closeAiTranscribeDialog() },
-            onSaveAndSync = { lrc -> viewModel.saveAiLyricsToSong(aiTranscribingSong!!.id, lrc) },
-            onReTranscribe = { prompt -> viewModel.startAiTranscribe(aiTranscribingSong!!, prompt) }
+            onSaveAndSync = { lrc ->
+                viewModel.saveAiLyricsToSong(aiTranscribingSong!!.id, lrc)
+            },
+            onReTranscribe = { prompt ->
+                viewModel.startAiTranscribe(aiTranscribingSong!!, prompt)
+            }
         )
     }
 }
@@ -429,8 +430,7 @@ private fun TopHeaderBar(
     isScanning: Boolean,
     sleepTimerSec: Int?,
     onScanClick: () -> Unit,
-    onSleepTimerClick: () -> Unit,
-    onAiLyricsClick: () -> Unit
+    onSleepTimerClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -485,21 +485,6 @@ private fun TopHeaderBar(
                 text = "موزیک پلیر پیشرفته و هوشمند",
                 color = TextSecondary,
                 fontSize = 11.sp
-            )
-        }
-
-        // AI Lyrics Quick Action Button
-        IconButton(
-            onClick = onAiLyricsClick,
-            modifier = Modifier
-                .clip(CircleShape)
-                .background(Color(0x33A855F7))
-        ) {
-            Icon(
-                imageVector = Icons.Default.AutoAwesome,
-                contentDescription = "AI Lyrics",
-                tint = NeonViolet,
-                modifier = Modifier.size(22.dp)
             )
         }
 
